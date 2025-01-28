@@ -10,8 +10,8 @@ const app = express();
 // Define allowed origins based on environment
 const allowedOrigins = [
   'http://localhost:3000',              // Local frontend
-  'https://lebaincode.vercel.app',      // Production frontend (update with your Vercel URL)
-  'https://www.lebaincode.com'          // If you have a custom domain
+  ' https://lebaincodefront-d2j7aye5k-jayzhehs-projects.vercel.app/',      // Production frontend vercel
+  //'https://www.lebaincode.com'           If custom domain
 ];
 
 // CORS configuration
