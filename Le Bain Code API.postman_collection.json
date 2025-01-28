@@ -1,0 +1,45 @@
+{
+	"info": {
+		"_postman_id": "1dd8f1bc-1f66-4c64-a13e-6ef329356bba",
+		"name": "Le Bain Code API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "30683266"
+	},
+	"item": [
+		{
+			"name": "AdminUsers",
+			"item": [
+				{
+					"name": "AdminUser",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"arthurlbc\",\n    \"password\": \"azerty\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:5000/api/auth/login",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "5000",
+							"path": [
+								"api",
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}

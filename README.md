@@ -32,3 +32,29 @@ npm run dev                                 # Start development server
 Use Postman to test endpoints:
 - POST /api/auth/login
 
+### To run API and back locally
+    1. Clone both frontend and backend repos
+```bash 
+    git clone [frontend-repo-url]
+    git clone [backend-repo-url]
+```
+
+    2. Install dependencies for both
+
+    3. Copy and configure environment variables
+ ```bash 
+    cp .env.example .env
+```
+
+    4. Import the database 
+```bash
+    mongorestore --db your_database_name ./backup/your_database_name
+    # Check if backup folder exists
+    ls ./backup/lebaincode
+```
+
+    5. Start both servers
+    - Terminal 1 (backend):
+    - Terminal 2 (frontend):
+
+
