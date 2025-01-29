@@ -1,8 +1,34 @@
 // routes/auth.js
 const router = require('express').Router();
-const bcrypt = require('bcryptjs');
+const passport = require('passport');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const User = require('../models/User');
+
+// GitHub auth routes
+router.get('/github', passport.authenticate('github', { scope: ['user:email'] }));
+
+router.get('/github/callback', 
+  passport.authenticate('github', { failureRedirect: '/login' }),
+  (req, res) => {
+    try {
+      const token = jwt.sign(
+        { userId: req.user._id },
+        process.env.JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+
+      const redirectUrl = `${process.env.NODE_ENV === 'production'
+        ? process.env.FRONTEND_URL_PROD
+        : process.env.FRONTEND_URL_DEV}/dashboard?token=${token}`;
+
+      res.redirect(redirectUrl);
+    } catch (error) {
+      console.error('Token generation error:', error);
+      res.redirect('/auth-error');
+    }
+  }
+);
 
 // Admin login route
 router.post('/login', async (req, res) => {
@@ -36,48 +62,6 @@ router.post('/login', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// GitHub OAuth callback route
-router.get('/github/callback', async (req, res) => {
-  try {
-    const { id: githubId } = req.user._json;
-
-    // Find the latest user number
-    const latestUser = await User.findOne({ role: 'user' })
-      .sort({ username: -1 });
-    
-    // Generate new user number (001, 002, etc.)
-    const newUserNumber = latestUser 
-      ? String(Number(latestUser.username) + 1).padStart(3, '0')
-      : '001';
-
-    // Create or update user
-    let user = await User.findOneAndUpdate(
-      { githubId },
-      {
-        username: newUserNumber,
-        role: 'user',
-        progress: {
-          cModule: { completed: 0, total: 10 },
-          examModule: { completed: 0, total: 4, isUnlocked: false }
-        }
-      },
-      { upsert: true, new: true }
-    );
-
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
-    // Redirect to frontend with token
-    res.redirect(`${process.env.FRONTEND_URL}/dashboard?token=${token}`);
-  } catch (error) {
-    console.error('GitHub auth error:', error);
-    res.redirect(`${process.env.FRONTEND_URL}/auth-error`);
   }
 });
 
