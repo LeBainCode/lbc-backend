@@ -6,7 +6,10 @@ const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 
 // GitHub auth routes
-router.get('/github', passport.authenticate('github', { scope: ['user:email'] }));
+router.get('/github', (req, res, next) => {
+  console.log('Redirecting to GitHub with redirect_uri:', req.app.get('callbackURL'));
+  next();
+}, passport.authenticate('github', { scope: ['user:email'] }));
 
 router.get('/github/callback',
   passport.authenticate('github', { failureRedirect: '/login' }),
@@ -18,8 +21,12 @@ router.get('/github/callback',
         { expiresIn: '24h' }
       );
 
-      // Redirect to frontend with token
-      const redirectUrl = new URL('/dashboard', 'https://lebaincodefront-d2j7aye5k-jayzhehs-projects.vercel.app');
+      // Fix the redirect URL based on environment
+      const frontendURL = process.env.NODE_ENV === 'production'
+        ? 'https://lebaincodefront-d2j7aye5k-jayzhehs-projects.vercel.app'
+        : 'http://localhost:3000';
+
+      const redirectUrl = new URL('/dashboard', frontendURL);
       redirectUrl.searchParams.append('token', token);
       
       console.log('Redirecting to:', redirectUrl.toString());

@@ -48,11 +48,21 @@ app.use(session({
 }));
 
 // Passport configuration
-passport.use(new GitHubStrategy({
-  clientID: process.env.GITHUB_CLIENT_ID,
-  clientSecret: process.env.GITHUB_CLIENT_SECRET,
-  callbackURL: 'https://lebaincode-backend.onrender.com/api/auth/github/callback'
-},
+const callbackURL = process.env.NODE_ENV === 'production'
+  ? 'https://lebaincode-backend.onrender.com/api/auth/github/callback'
+  : 'http://localhost:5000/api/auth/github/callback';
+
+// Store callbackURL in app settings
+app.set('callbackURL', callbackURL);
+
+// Passport configuration
+passport.use(
+  new GitHubStrategy(
+    {
+      clientID: process.env.GITHUB_CLIENT_ID,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET,
+      callbackURL,
+    },
 async function(accessToken, refreshToken, profile, done) {
   try {
     let user = await User.findOne({ githubId: profile.id });
@@ -106,6 +116,11 @@ app.use(passport.session());
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
+
+//Server running check
+app.get('/', (req, res) => {
+  res.send('LBC backend is running!');
+});
 
 // User profile route with error handling
 const authMiddleware = require('./middleware/auth');
