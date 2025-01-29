@@ -18,11 +18,16 @@ router.get('/github/callback',
         { expiresIn: '24h' }
       );
 
-      const redirectUrl = `${process.env.NODE_ENV === 'production'
+      // Create full redirect URL
+      const baseUrl = process.env.NODE_ENV === 'production'
         ? process.env.FRONTEND_URL_PROD
-        : process.env.FRONTEND_URL_DEV}/dashboard?token=${token}`;
+        : process.env.FRONTEND_URL_DEV;
 
-      res.redirect(redirectUrl);
+      const redirectUrl = new URL('/dashboard', baseUrl);
+      redirectUrl.searchParams.append('token', token);
+
+      console.log('Redirecting to:', redirectUrl.toString());
+      res.redirect(redirectUrl.toString());
     } catch (error) {
       console.error('Token generation error:', error);
       res.redirect('/auth-error');

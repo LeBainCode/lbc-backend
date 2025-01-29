@@ -1,18 +1,19 @@
 // src/server.js
-require('dotenv').config(); // Must be first line
+require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const passport = require('passport');
 const session = require('express-session');
+const MongoStore = require('connect-mongo');
 const GitHubStrategy = require('passport-github2').Strategy;
 const User = require('./models/User');
+
+const app = express();
 
 // Debug environment variables
 console.log('GitHub Client ID:', process.env.GITHUB_CLIENT_ID);
 console.log('Environment:', process.env.NODE_ENV);
-
-const app = express();
 
 // Middleware
 app.use(express.json());
@@ -23,11 +24,15 @@ app.use(cors({
   credentials: true
 }));
 
-// Session middleware
+// Session middleware with MongoStore
 app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGODB_URI,
+    ttl: 24 * 60 * 60 // 1 day
+  }),
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
@@ -41,7 +46,7 @@ passport.use(new GitHubStrategy({
     clientSecret: process.env.GITHUB_CLIENT_SECRET,
     callbackURL: `${process.env.NODE_ENV === 'production'
       ? 'https://lebaincode-backend.onrender.com'
-      : 'http://localhost:5000'}/api/auth/github/callback`
+      : 'http://localhost:3000'}/api/auth/github/callback`
   },
   async function(accessToken, refreshToken, profile, done) {
     try {
@@ -85,16 +90,14 @@ passport.deserializeUser(async (id, done) => {
   }
 });
 
-// Initialize passport
 app.use(passport.initialize());
 app.use(passport.session());
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 
-const authMiddleware = require('./middleware/auth');
-
 // User profile route
+const authMiddleware = require('./middleware/auth');
 app.get('/api/user/profile', authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId);
