@@ -9,17 +9,19 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true
+    required: function() {
+      return this.role === 'admin'; // Only required for admin users
+    }
   },
-  organization: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Organization',
-    required: true
+  githubId: {
+    type: String,
+    sparse: true, // Allows null values but ensures uniqueness when present
+    unique: true
   },
   role: {
     type: String,
-    enum: ['student', 'admin'],
-    default: 'student'
+    enum: ['user', 'admin'],
+    default: 'user'
   },
   progress: {
     cModule: {
