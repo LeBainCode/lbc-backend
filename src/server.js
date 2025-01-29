@@ -49,39 +49,37 @@ app.use(session({
 
 // Passport configuration
 passport.use(new GitHubStrategy({
-    clientID: process.env.GITHUB_CLIENT_ID,
-    clientSecret: process.env.GITHUB_CLIENT_SECRET,
-    callbackURL: `${process.env.NODE_ENV === 'production'
-      ? 'https://lebaincode-backend.onrender.com'
-      : 'http://localhost:5000'}/api/auth/github/callback`
-  },
-  async function(accessToken, refreshToken, profile, done) {
-    try {
-      let user = await User.findOne({ githubId: profile.id });
+  clientID: process.env.GITHUB_CLIENT_ID,
+  clientSecret: process.env.GITHUB_CLIENT_SECRET,
+  callbackURL: 'https://lebaincode-backend.onrender.com/api/auth/github/callback'
+},
+async function(accessToken, refreshToken, profile, done) {
+  try {
+    let user = await User.findOne({ githubId: profile.id });
+    
+    if (!user) {
+      const latestUser = await User.findOne({ role: 'user' })
+        .sort({ username: -1 });
       
-      if (!user) {
-        const latestUser = await User.findOne({ role: 'user' })
-          .sort({ username: -1 });
-        
-        const newUserNumber = latestUser 
-          ? String(Number(latestUser.username) + 1).padStart(3, '0')
-          : '001';
+      const newUserNumber = latestUser 
+        ? String(Number(latestUser.username) + 1).padStart(3, '0')
+        : '001';
 
-        user = await User.create({
-          username: newUserNumber,
-          githubId: profile.id,
-          role: 'user',
-          progress: {
-            cModule: { completed: 0, total: 10 },
-            examModule: { completed: 0, total: 4, isUnlocked: false }
-          }
-        });
-      }
-      return done(null, user);
-    } catch (err) {
-      return done(err, null);
+      user = await User.create({
+        username: newUserNumber,
+        githubId: profile.id,
+        role: 'user',
+        progress: {
+          cModule: { completed: 0, total: 10 },
+          examModule: { completed: 0, total: 4, isUnlocked: false }
+        }
+      });
     }
+    return done(null, user);
+  } catch (err) {
+    return done(err, null);
   }
+}
 ));
 
 passport.serializeUser((user, done) => {

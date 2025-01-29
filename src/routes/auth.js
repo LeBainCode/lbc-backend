@@ -8,7 +8,7 @@ const User = require('../models/User');
 // GitHub auth routes
 router.get('/github', passport.authenticate('github', { scope: ['user:email'] }));
 
-router.get('/github/callback', 
+router.get('/github/callback',
   passport.authenticate('github', { failureRedirect: '/login' }),
   (req, res) => {
     try {
@@ -18,14 +18,10 @@ router.get('/github/callback',
         { expiresIn: '24h' }
       );
 
-      // Create full redirect URL
-      const baseUrl = process.env.NODE_ENV === 'production'
-        ? process.env.FRONTEND_URL_PROD
-        : process.env.FRONTEND_URL_DEV;
-
-      const redirectUrl = new URL('/dashboard', baseUrl);
+      // Redirect to frontend with token
+      const redirectUrl = new URL('/dashboard', 'https://lebaincodefront-d2j7aye5k-jayzhehs-projects.vercel.app');
       redirectUrl.searchParams.append('token', token);
-
+      
       console.log('Redirecting to:', redirectUrl.toString());
       res.redirect(redirectUrl.toString());
     } catch (error) {
