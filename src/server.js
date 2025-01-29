@@ -1,4 +1,5 @@
 // src/server.js
+// src/server.js
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
@@ -15,14 +16,18 @@ const app = express();
 console.log('GitHub Client ID:', process.env.GITHUB_CLIENT_ID);
 console.log('Environment:', process.env.NODE_ENV);
 
-// Middleware
-app.use(express.json());
+// Updated CORS configuration
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? process.env.FRONTEND_URL_PROD
-    : process.env.FRONTEND_URL_DEV,
-  credentials: true
+  origin: [
+    'http://localhost:3000',
+    'https://lebaincodefront-d2j7aye5k-jayzhehs-projects.vercel.app'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+app.use(express.json());
 
 // Session middleware with MongoStore
 app.use(session({
@@ -36,7 +41,9 @@ app.use(session({
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : 'localhost'
   }
 }));
 
@@ -90,13 +97,19 @@ passport.deserializeUser(async (id, done) => {
   }
 });
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ message: 'Something went wrong!' });
+});
+
 app.use(passport.initialize());
 app.use(passport.session());
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 
-// User profile route
+// User profile route with error handling
 const authMiddleware = require('./middleware/auth');
 app.get('/api/user/profile', authMiddleware, async (req, res) => {
   try {
@@ -111,14 +124,18 @@ app.get('/api/user/profile', authMiddleware, async (req, res) => {
       progress: user.progress
     });
   } catch (err) {
+    console.error('Profile fetch error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
-// MongoDB connection
+// MongoDB connection with better error handling
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
