@@ -32,7 +32,7 @@ npm run dev                                 # Start development server
 Use Postman to test endpoints:
 - POST /api/auth/login
 
-### To run API and back locally
+### To run API and back locally (Should not be needed)
     1. Clone both frontend and backend repos
 ```bash 
     git clone [frontend-repo-url]
