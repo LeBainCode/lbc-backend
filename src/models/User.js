@@ -7,15 +7,21 @@ const userSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
+  email: {
+    type: String,
+    sparse: true, // Allows null values but ensures uniqueness when present
+    trim: true,
+    lowercase: true
+  },
   password: {
     type: String,
     required: function() {
-      return this.role === 'admin'; // Only required for admin users
+      return this.role === 'admin';
     }
   },
   githubId: {
     type: String,
-    sparse: true, // Allows null values but ensures uniqueness when present
+    sparse: true,
     unique: true
   },
   role: {

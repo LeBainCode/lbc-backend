@@ -10,6 +10,7 @@ const GitHubStrategy = require('passport-github2').Strategy;
 const User = require('./models/User');
 const app = express();
 const adminRoutes = require('./routes/admin');
+const emailRoutes = require('./routes/email');
 
 // Debug environment variables
 console.log('GitHub Client ID:', process.env.GITHUB_CLIENT_ID);
@@ -110,9 +111,16 @@ app.get('/', (req, res) => {
   res.send('LBC backend is running!');
 });
 
+// Middleware log
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  next();
+});
+
 const authMiddleware = require('./middleware/auth');
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/admin', adminRoutes);
+app.use('/api', emailRoutes);
 
 app.get('/api/user/profile', authMiddleware, async (req, res) => {
   try {
@@ -150,4 +158,12 @@ mongoose.connect(process.env.MONGODB_URI)
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+});
+
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ 
+    error: 'Server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'An unexpected error occurred'
+  });
 });
