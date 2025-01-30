@@ -1,5 +1,4 @@
 // src/server.js
-// src/server.js
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
@@ -9,14 +8,15 @@ const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const GitHubStrategy = require('passport-github2').Strategy;
 const User = require('./models/User');
-
 const app = express();
+const adminRoutes = require('./routes/admin');
 
 // Debug environment variables
 console.log('GitHub Client ID:', process.env.GITHUB_CLIENT_ID);
 console.log('Environment:', process.env.NODE_ENV);
 
-// Updated CORS configuration
+// 1. Essential middleware
+app.use(express.json());
 app.use(cors({
   origin: [
     'http://localhost:3000',
@@ -27,9 +27,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(express.json());
-
-// Session middleware with MongoStore
+// 2. Session configuration
 app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
@@ -47,15 +45,17 @@ app.use(session({
   }
 }));
 
-// Passport configuration
+// 3. Passport initialization
+app.use(passport.initialize());
+app.use(passport.session());
+
+// 4. Passport configuration
 const callbackURL = process.env.NODE_ENV === 'production'
   ? 'https://lebaincode-backend.onrender.com/api/auth/github/callback'
   : 'http://localhost:5000/api/auth/github/callback';
 
-// Store callbackURL in app settings
 app.set('callbackURL', callbackURL);
 
-// Passport configuration
 passport.use(
   new GitHubStrategy(
     {
@@ -63,33 +63,33 @@ passport.use(
       clientSecret: process.env.GITHUB_CLIENT_SECRET,
       callbackURL,
     },
-async function(accessToken, refreshToken, profile, done) {
-  try {
-    let user = await User.findOne({ githubId: profile.id });
-    
-    if (!user) {
-      const latestUser = await User.findOne({ role: 'user' })
-        .sort({ username: -1 });
-      
-      const newUserNumber = latestUser 
-        ? String(Number(latestUser.username) + 1).padStart(3, '0')
-        : '001';
+    async function(accessToken, refreshToken, profile, done) {
+      try {
+        let user = await User.findOne({ githubId: profile.id });
+        
+        if (!user) {
+          const latestUser = await User.findOne({ role: 'user' })
+            .sort({ username: -1 });
+          
+          const newUserNumber = latestUser 
+            ? String(Number(latestUser.username) + 1).padStart(3, '0')
+            : '001';
 
-      user = await User.create({
-        username: newUserNumber,
-        githubId: profile.id,
-        role: 'user',
-        progress: {
-          cModule: { completed: 0, total: 10 },
-          examModule: { completed: 0, total: 4, isUnlocked: false }
+          user = await User.create({
+            username: newUserNumber,
+            githubId: profile.id,
+            role: 'user',
+            progress: {
+              cModule: { completed: 0, total: 10 },
+              examModule: { completed: 0, total: 4, isUnlocked: false }
+            }
+          });
         }
-      });
+        return done(null, user);
+      } catch (err) {
+        return done(err, null);
+      }
     }
-    return done(null, user);
-  } catch (err) {
-    return done(err, null);
-  }
-}
 ));
 
 passport.serializeUser((user, done) => {
@@ -105,25 +105,15 @@ passport.deserializeUser(async (id, done) => {
   }
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Something went wrong!' });
-});
-
-app.use(passport.initialize());
-app.use(passport.session());
-
-// Routes
-app.use('/api/auth', require('./routes/auth'));
-
-//Server running check
+// 5. Routes
 app.get('/', (req, res) => {
   res.send('LBC backend is running!');
 });
 
-// User profile route with error handling
 const authMiddleware = require('./middleware/auth');
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/admin', adminRoutes);
+
 app.get('/api/user/profile', authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId);
@@ -142,7 +132,13 @@ app.get('/api/user/profile', authMiddleware, async (req, res) => {
   }
 });
 
-// MongoDB connection with better error handling
+// 6. Error handling middleware (must be last)
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ message: 'Something went wrong!' });
+});
+
+// 7. Database connection
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => {
@@ -150,6 +146,7 @@ mongoose.connect(process.env.MONGODB_URI)
     process.exit(1);
   });
 
+// 8. Server startup
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
