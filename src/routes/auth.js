@@ -7,7 +7,8 @@ const User = require('../models/User');
 
 // GitHub auth routes
 router.get('/github', (req, res, next) => {
-  console.log('Redirecting to GitHub with redirect_uri:', req.app.get('callbackURL'));
+  const callbackURL = req.app.get('callbackURL');
+  console.log('Redirecting to GitHub with redirect_uri:', callbackURL);
   next();
 }, passport.authenticate('github', { scope: ['user:email'] }));
 
@@ -21,9 +22,9 @@ router.get('/github/callback',
         { expiresIn: '24h' }
       );
 
-      // Fix the redirect URL based on environment
+      // Update frontend URL detection
       const frontendURL = process.env.NODE_ENV === 'production'
-        ? 'https://lebaincodefront-d2j7aye5k-jayzhehs-projects.vercel.app'
+        ? 'https://lebaincodefront.vercel.app'  // Updated to your actual Vercel domain
         : 'http://localhost:3000';
 
       const redirectUrl = new URL('/dashboard', frontendURL);
@@ -43,13 +44,18 @@ router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
     
+    // Add logging for debugging
+    console.log(`Login attempt for username: ${username}`);
+    
     const user = await User.findOne({ username });
     if (!user || user.role !== 'admin') {
+      console.log('Invalid credentials - user not found or not admin');
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      console.log('Invalid credentials - password mismatch');
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
@@ -58,6 +64,9 @@ router.post('/login', async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
+
+    // Add response logging
+    console.log(`Successful login for user: ${username}`);
 
     res.json({
       token,
@@ -69,8 +78,14 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (err) {
+    console.error('Login error:', err);
     res.status(500).json({ message: 'Server error' });
   }
+});
+
+// Add health check route
+router.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
 });
 
 module.exports = router;
