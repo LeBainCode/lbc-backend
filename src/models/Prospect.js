@@ -9,6 +9,19 @@ const prospectSchema = new mongoose.Schema({
     trim: true,
     lowercase: true
   },
+  type: {
+    type: String,
+    enum: ['individual', 'organization', 'other'],
+    default: 'individual'
+  },
+  reachedOut: {
+    type: Boolean,
+    default: false
+  },
+  comment: {
+    type: String,
+    default: ''
+  },
   createdAt: {
     type: Date,
     default: Date.now
