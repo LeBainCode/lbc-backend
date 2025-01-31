@@ -60,18 +60,22 @@ router.put('/prospects/:email/type', adminMiddleware, async (req, res) => {
         const { type } = req.body;
         const prospect = await Prospect.findOneAndUpdate(
             { email },
-            { type },
+            { 
+                type,
+                'lastUpdatedBy.type': {
+                    admin: req.user.username,
+                    timestamp: new Date()
+                }
+            },
             { new: true }
         );
-        if (!prospect) {
-            return res.status(404).json({ message: 'Prospect not found' });
-        }
         res.json(prospect);
     } catch (error) {
-        console.error('Error updating prospect type:', error);
         res.status(500).json({ message: 'Error updating prospect type' });
     }
 });
+
+// Similar updates for reached out and comment routes...
 
 // Update reached out status
 router.put('/prospects/:email/reached-out', adminMiddleware, async (req, res) => {
