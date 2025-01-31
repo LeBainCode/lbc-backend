@@ -8,7 +8,13 @@ const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const GitHubStrategy = require('passport-github2').Strategy;
 const User = require('./models/User');
+const http = require('http');
+const WebSocket = require('ws');
+
 const app = express();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
 const adminRoutes = require('./routes/admin');
 const emailRoutes = require('./routes/email');
 
@@ -25,7 +31,8 @@ app.use(cors({
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Set-Cookie', 'Upgrade', 'Connection']
 }));
 
 // 2. Session configuration
@@ -57,40 +64,38 @@ const callbackURL = process.env.NODE_ENV === 'production'
 
 app.set('callbackURL', callbackURL);
 
-passport.use(
-  new GitHubStrategy(
-    {
-      clientID: process.env.GITHUB_CLIENT_ID,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET,
-      callbackURL,
-    },
-    async function(accessToken, refreshToken, profile, done) {
-      try {
-        let user = await User.findOne({ githubId: profile.id });
+passport.use(new GitHubStrategy({
+    clientID: process.env.GITHUB_CLIENT_ID,
+    clientSecret: process.env.GITHUB_CLIENT_SECRET,
+    callbackURL,
+  },
+  async function(accessToken, refreshToken, profile, done) {
+    try {
+      let user = await User.findOne({ githubId: profile.id });
+      
+      if (!user) {
+        const latestUser = await User.findOne({ role: 'user' })
+          .sort({ username: -1 });
         
-        if (!user) {
-          const latestUser = await User.findOne({ role: 'user' })
-            .sort({ username: -1 });
-          
-          const newUserNumber = latestUser 
-            ? String(Number(latestUser.username) + 1).padStart(3, '0')
-            : '001';
+        const newUserNumber = latestUser 
+          ? String(Number(latestUser.username) + 1).padStart(3, '0')
+          : '001';
 
-          user = await User.create({
-            username: newUserNumber,
-            githubId: profile.id,
-            role: 'user',
-            progress: {
-              cModule: { completed: 0, total: 10 },
-              examModule: { completed: 0, total: 4, isUnlocked: false }
-            }
-          });
-        }
-        return done(null, user);
-      } catch (err) {
-        return done(err, null);
+        user = await User.create({
+          username: newUserNumber,
+          githubId: profile.id,
+          role: 'user',
+          progress: {
+            cModule: { completed: 0, total: 10 },
+            examModule: { completed: 0, total: 4, isUnlocked: false }
+          }
+        });
       }
+      return done(null, user);
+    } catch (err) {
+      return done(err, null);
     }
+  }
 ));
 
 passport.serializeUser((user, done) => {
@@ -106,7 +111,31 @@ passport.deserializeUser(async (id, done) => {
   }
 });
 
-// 5. Routes
+// 5. WebSocket setup
+wss.on('connection', (ws) => {
+  console.log('New WebSocket connection');
+
+  ws.on('message', (message) => {
+    try {
+      const { type, data } = JSON.parse(message.toString());
+      
+      // Broadcast updates to all connected clients
+      wss.clients.forEach(client => {
+        if (client !== ws && client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ type, data }));
+        }
+      });
+    } catch (error) {
+      console.error('WebSocket message error:', error);
+    }
+  });
+
+  ws.on('error', (error) => {
+    console.error('WebSocket error:', error);
+  });
+});
+
+// 6. Routes
 app.get('/', (req, res) => {
   res.send('LBC backend is running!');
 });
@@ -140,13 +169,16 @@ app.get('/api/user/profile', authMiddleware, async (req, res) => {
   }
 });
 
-// 6. Error handling middleware (must be last)
+// 7. Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ message: 'Something went wrong!' });
+  res.status(500).json({ 
+    error: 'Server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'An unexpected error occurred'
+  });
 });
 
-// 7. Database connection
+// 8. Database connection
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => {
@@ -154,16 +186,8 @@ mongoose.connect(process.env.MONGODB_URI)
     process.exit(1);
   });
 
-// 8. Server startup
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+// 9. Server startup
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-});
-
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ 
-    error: 'Server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'An unexpected error occurred'
-  });
 });

@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const Prospect = require('../models/Prospect'); // Add this import
+const Prospect = require('../models/Prospect'); 
 const jwt = require('jsonwebtoken');
 
 // Admin middleware
@@ -110,6 +110,22 @@ router.put('/prospects/:email/comment', adminMiddleware, async (req, res) => {
     } catch (error) {
         console.error('Error updating comment:', error);
         res.status(500).json({ message: 'Error updating comment' });
+    }
+});
+
+// Get all regular users
+router.get('/users', adminMiddleware, async (req, res) => {
+    try {
+        const users = await User.find({ 
+            role: 'user' 
+        })
+        .select('username email createdAt')
+        .sort({ createdAt: -1 });
+        
+        res.json(users);
+    } catch (error) {
+        console.error('Error fetching users:', error);
+        res.status(500).json({ message: 'Error fetching users' });
     }
 });
 
