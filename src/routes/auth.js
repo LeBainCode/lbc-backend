@@ -83,6 +83,39 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// Add this route to your auth.js
+router.get('/user/profile', async (req, res) => {
+  try {
+    // Get token from header
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
+
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Find user
+    const user = await User.findById(decoded.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Return user data
+    res.json({
+      _id: user._id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      githubId: user.githubId,
+      progress: user.progress
+    });
+  } catch (error) {
+    console.error('Profile fetch error:', error);
+    res.status(401).json({ message: 'Invalid token' });
+  }
+});
+
 // Add health check route
 router.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
