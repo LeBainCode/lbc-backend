@@ -74,16 +74,19 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // GitHub OAuth configuration
-const callbackURL = process.env.NODE_ENV === 'production'
-  ? 'https://lebaincode-backend.onrender.com/api/auth/github/callback'
-  : 'http://localhost:5000/api/auth/github/callback';
+const githubConfig = {
+  clientID: process.env.NODE_ENV === 'production' 
+    ? process.env.GITHUB_CLIENT_ID_PROD 
+    : process.env.GITHUB_CLIENT_ID_DEV,
+  clientSecret: process.env.NODE_ENV === 'production' 
+    ? process.env.GITHUB_CLIENT_SECRET_PROD 
+    : process.env.GITHUB_CLIENT_SECRET_DEV,
+  callbackURL: process.env.NODE_ENV === 'production'
+    ? 'https://lebaincode-backend.onrender.com/api/auth/github/callback'
+    : 'http://localhost:5000/api/auth/github/callback'
+};
 
-passport.use(new GitHubStrategy({
-    clientID: process.env.GITHUB_CLIENT_ID,
-    clientSecret: process.env.GITHUB_CLIENT_SECRET,
-    callbackURL
-  },
-  async function(accessToken, refreshToken, profile, done) {
+passport.use(new GitHubStrategy(githubConfig, async function(accessToken, refreshToken, profile, done) {
     try {
       let user = await User.findOne({ githubId: profile.id });
       
