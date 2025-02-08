@@ -3,26 +3,32 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const passport = require('passport');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
-const GitHubStrategy = require('passport-github2').Strategy;
-const User = require('./models/User');
+const jwt = require('jsonwebtoken');
 const http = require('http');
 const WebSocket = require('ws');
+const passport = require('passport');
+const { configureGitHubStrategy } = require('./config/passport');
+const cookieParser = require('cookie-parser');
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-const adminRoutes = require('./routes/admin');
-const emailRoutes = require('./routes/email');
+// Middleware for logging requests
+app.use((req, res, next) => {
+  console.log('\n=== Incoming Request ===');
+  console.log('Time:', new Date().toISOString());
+  console.log('Method:', req.method);
+  console.log('Path:', req.path);
+  console.log('Query:', req.query);
+  console.log('Headers:', req.headers);
+  next();
+});
 
-// Debug environment variables
-console.log('GitHub Client ID:', process.env.GITHUB_CLIENT_ID);
-console.log('Environment:', process.env.NODE_ENV);
-
-// CORS configuration - Updated to fix the CORS error
+// Middleware
+app.use(express.json());
 app.use(cors({
   origin: ['http://localhost:3000', 'https://lebaincodefront.vercel.app'],
   credentials: true,
@@ -31,26 +37,8 @@ app.use(cors({
   exposedHeaders: ['Set-Cookie']
 }));
 
-// Additional headers for CORS preflight requests
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin);
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-});
-
-// Essential middleware
-app.use(express.json());
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
-});
+app.use(passport.initialize());
+app.use(cookieParser());
 
 // Session configuration
 app.use(session({
@@ -69,101 +57,80 @@ app.use(session({
   }
 }));
 
-// Passport initialization
-app.use(passport.initialize());
+
 app.use(passport.session());
 
-// GitHub OAuth configuration
-const githubConfig = {
-  clientID: process.env.NODE_ENV === 'production' 
-    ? process.env.GITHUB_CLIENT_ID_PROD 
-    : process.env.GITHUB_CLIENT_ID_DEV,
-  clientSecret: process.env.NODE_ENV === 'production' 
-    ? process.env.GITHUB_CLIENT_SECRET_PROD 
-    : process.env.GITHUB_CLIENT_SECRET_DEV,
-  callbackURL: process.env.NODE_ENV === 'production'
-    ? 'https://lebaincode-backend.onrender.com/api/auth/github/callback'
-    : 'http://localhost:5000/api/auth/github/callback'
-};
+// Configure GitHub strategy
+configureGitHubStrategy();
 
-passport.use(new GitHubStrategy(githubConfig, async function(accessToken, refreshToken, profile, done) {
-    try {
-      let user = await User.findOne({ githubId: profile.id });
-      
-      if (!user) {
-        const latestUser = await User.findOne({ role: 'user' })
-          .sort({ username: -1 });
-        
-        const newUserNumber = latestUser 
-          ? String(Number(latestUser.username) + 1).padStart(3, '0')
-          : '001';
-
-        user = await User.create({
-          username: newUserNumber,
-          githubId: profile.id,
-          role: 'user',
-          progress: {
-            cModule: { completed: 0, total: 10 },
-            examModule: { completed: 0, total: 4, isUnlocked: false }
-          }
-        });
-      }
-      return done(null, user);
-    } catch (err) {
-      return done(err, null);
-    }
-  }
-));
-
-// Passport serialization
-passport.serializeUser((user, done) => {
-  done(null, user.id);
-});
-
-passport.deserializeUser(async (id, done) => {
-  try {
-    const user = await User.findById(id);
-    done(null, user);
-  } catch (err) {
-    done(err, null);
-  }
-});
-
-// Request logging middleware
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-  next();
-});
-
-// Routes
+// Routes 
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/admin', adminRoutes);
-app.use('/api', emailRoutes);
+app.use('/api/admin', require('./routes/admin'));
+app.use('/api', require('./routes/email'));
+app.use('/api/analytics', require('./routes/analytics'));
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(`${new Date().toISOString()} - Error:`, err);
-  res.status(500).json({ 
-    error: 'Server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'An unexpected error occurred'
+
+// Development-only routes
+if (process.env.NODE_ENV === 'development') {
+  app.post('/api/auth/test-user', async (req, res) => {
+    try {
+      const User = require('./models/User');
+      console.log('Creating test user...');
+      
+      const latestUser = await User.findOne({ role: 'user' })
+        .sort({ username: -1 });
+      
+      const newUserNumber = latestUser 
+        ? String(Number(latestUser.username) + 1).padStart(3, '0')
+        : '001';
+
+      const testUser = await User.create({
+        username: newUserNumber,
+        role: 'user',
+        progress: {
+          cModule: { completed: 0, total: 10 },
+          examModule: { completed: 0, total: 4, isUnlocked: false }
+        }
+      });
+      
+      console.log('Test user created:', {
+        id: testUser._id,
+        username: testUser.username
+      });
+      
+      res.json(testUser);
+    } catch (err) {
+      console.error('Test user creation error:', err);
+      res.status(500).json({ error: err.message });
+    }
   });
+
+  app.get('/api/auth/debug/session', (req, res) => {
+    console.log('\n=== Debug Session Info ===');
+    console.log('Session:', req.session);
+    res.json({ session: req.session });
+  });
+}
+
+// Health check route
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
 });
 
-// Database connection
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => {
-    console.error('MongoDB connection error:', err);
-    process.exit(1);
-  });
+app.get('/api/auth/verify-session', (req, res) => {
+  console.log('Token from cookies:', req.cookies.token); 
+  res.send('Check the console for the token');
+});
 
-// WebSocket setup
+// WebSocket setup with logging
 wss.on('connection', (ws) => {
-  console.log('New WebSocket connection');
+  console.log('\n=== New WebSocket Connection ===');
   
   ws.on('message', (message) => {
     try {
       const { type, data } = JSON.parse(message.toString());
+      console.log('WebSocket message received:', { type, data });
+      
       wss.clients.forEach(client => {
         if (client !== ws && client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify({ type, data }));
@@ -179,8 +146,32 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Server startup
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('\n=== Error Handler ===');
+  console.error('Error:', err);
+  console.error('Stack:', err.stack);
+  
+  res.status(500).json({
+    error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+  });
+});
+
+// Database connection
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log('Connected to MongoDB'))
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  });
+
+// Start server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
+  console.log(`\n=== Server Started ===`);
   console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV}`);
+  console.log('BACKEND_URL:', process.env.BACKEND_URL);
+  console.log('FRONTEND_URL:', process.env.FRONTEND_URL);
+  console.log('GitHub callback URL:', `${process.env.BACKEND_URL}/api/auth/github/callback`);
 });

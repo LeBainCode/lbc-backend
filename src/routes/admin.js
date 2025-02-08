@@ -4,6 +4,7 @@ const router = express.Router();
 const User = require('../models/User');
 const Prospect = require('../models/Prospect'); 
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 
 // Admin middleware
 const adminMiddleware = async (req, res, next) => {
@@ -132,5 +133,179 @@ router.get('/users', adminMiddleware, async (req, res) => {
         res.status(500).json({ message: 'Error fetching users' });
     }
 });
+
+// Enable beta access for a user
+router.post('/users/:userId/beta', adminMiddleware, async (req, res) => {
+    try {
+      const user = await User.findById(req.params.userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+  
+      user.role = 'beta';
+      user.betaAccess = {
+        isEnabled: true,
+        enabledAt: new Date(),
+        enabledBy: req.user._id
+      };
+      await user.save();
+  
+      res.json({ 
+        message: 'Beta access granted successfully',
+        user: {
+          username: user.username,
+          role: user.role,
+          betaAccess: user.betaAccess
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ message: 'Error enabling beta access' });
+    }
+  });
+  
+  // Get beta users
+  router.get('/users/beta', adminMiddleware, async (req, res) => {
+    try {
+      const betaUsers = await User.find({ role: 'beta' })
+        .select('username email createdAt betaAccess')
+        .sort({ 'betaAccess.enabledAt': -1 });
+      
+      res.json(betaUsers);
+    } catch (error) {
+      res.status(500).json({ message: 'Error fetching beta users' });
+    }
+  });
+
+  // Get all admin users
+router.get('/admins', adminMiddleware, async (req, res) => {
+    try {
+        const admins = await User.find({ role: 'admin' })
+            .select('username email createdAt lastLogin')
+            .sort({ createdAt: -1 });
+        
+        res.json(admins);
+    } catch (error) {
+        console.error('Error fetching admins:', error);
+        res.status(500).json({ message: 'Error fetching admin users' });
+    }
+});
+
+// Create new admin user
+router.post('/admins', adminMiddleware, async (req, res) => {
+    try {
+        const { username, email, password } = req.body;
+
+        // Validate required fields
+        if (!username || !email || !password) {
+            return res.status(400).json({ 
+                message: 'Username, email, and password are required' 
+            });
+        }
+
+        // Check if username or email already exists
+        const existingUser = await User.findOne({
+            $or: [{ username }, { email }]
+        });
+
+        if (existingUser) {
+            return res.status(400).json({ 
+                message: 'Username or email already exists' 
+            });
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const newAdmin = await User.create({
+            username,
+            email,
+            password: hashedPassword,
+            role: 'admin'
+        });
+
+        res.status(201).json({
+            message: 'Admin user created successfully',
+            admin: {
+                username: newAdmin.username,
+                email: newAdmin.email,
+                createdAt: newAdmin.createdAt
+            }
+        });
+    } catch (error) {
+        console.error('Error creating admin:', error);
+        res.status(500).json({ message: 'Error creating admin user' });
+    }
+});
+
+// Update admin user
+router.put('/admins/:adminId', adminMiddleware, async (req, res) => {
+    try {
+        const { username, email, password } = req.body;
+        
+        // Prevent self-update of critical fields
+        if (req.params.adminId === req.user.id && (username || email)) {
+            return res.status(400).json({ 
+                message: 'Cannot update your own username or email' 
+            });
+        }
+
+        const adminToUpdate = await User.findOne({
+            _id: req.params.adminId,
+            role: 'admin'
+        });
+
+        if (!adminToUpdate) {
+            return res.status(404).json({ message: 'Admin user not found' });
+        }
+
+        // Update fields if provided
+        if (username) adminToUpdate.username = username;
+        if (email) adminToUpdate.email = email;
+        if (password) {
+            adminToUpdate.password = await bcrypt.hash(password, 10);
+        }
+
+        await adminToUpdate.save();
+
+        res.json({
+            message: 'Admin user updated successfully',
+            admin: {
+                username: adminToUpdate.username,
+                email: adminToUpdate.email,
+                updatedAt: adminToUpdate.updatedAt
+            }
+        });
+    } catch (error) {
+        console.error('Error updating admin:', error);
+        res.status(500).json({ message: 'Error updating admin user' });
+    }
+});
+
+// Delete admin user
+router.delete('/admins/:adminId', adminMiddleware, async (req, res) => {
+    try {
+        // Prevent self-deletion
+        if (req.params.adminId === req.user.id) {
+            return res.status(400).json({ 
+                message: 'Cannot delete your own admin account' 
+            });
+        }
+
+        const result = await User.deleteOne({ 
+            _id: req.params.adminId,
+            role: 'admin'
+        });
+
+        if (result.deletedCount === 0) {
+            return res.status(404).json({ message: 'Admin user not found' });
+        }
+
+        res.json({ message: 'Admin user deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting admin:', error);
+        res.status(500).json({ message: 'Error deleting admin user' });
+    }
+});
+
 
 module.exports = router;
