@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const Analytics = require('../models/Analytics');
 const adminMiddleware = require('../middleware/auth');
+const verifyToken = require('../middleware/auth');
 
 // Track page views
 let pageViews = {};
@@ -84,9 +85,14 @@ router.get('/data', adminMiddleware, async (req, res) => {
   }
 });
 
-router.get('/frontend-data', adminMiddleware, async (req, res) => {
-    try {
-      const thirtyDaysAgo = new Date();
+router.get('/frontend-data', verifyToken, async (req, res) => {
+  // Check if user is admin
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Forbidden: Admin access required' });
+  }
+
+  try {
+    const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   
       const analyticsData = await Analytics.aggregate([
