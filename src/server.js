@@ -67,7 +67,7 @@ configureGitHubStrategy();
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api', require('./routes/email'));
-app.use('/api/analytics', require('./routes/analytics'));
+app.use('/api/admin/analytics', require('./routes/analytics'));
 
 
 // Development-only routes
