@@ -70,7 +70,7 @@ router.post('/prospects/email', async (req, res) => {
   }
 });
 
-// Update the route path to include /api prefix
+
 router.post('/users/:userId/email', authMiddleware, async (req, res) => {
   try {
     const { userId } = req.params;

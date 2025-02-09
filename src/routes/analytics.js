@@ -84,4 +84,39 @@ router.get('/data', adminMiddleware, async (req, res) => {
   }
 });
 
+router.get('/frontend-data', adminMiddleware, async (req, res) => {
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  
+      const analyticsData = await Analytics.aggregate([
+        {
+          $match: {
+            date: { $gte: thirtyDaysAgo }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalVisits: { $sum: '$totalVisits' },
+            uniqueVisitors: { $sum: '$uniqueVisitors' },
+            averageSessionDuration: { $avg: '$averageSessionDuration' },
+            bounceRate: { $avg: '$bounceRate' },
+            pageViews: { $push: '$pageViews' },
+          }
+        }
+      ]);
+  
+      res.json({
+        totalVisits: analyticsData[0].totalVisits,
+        uniqueVisitors: analyticsData[0].uniqueVisitors,
+        averageSessionDuration: analyticsData[0].averageSessionDuration,
+        bounceRate: analyticsData[0].bounceRate,
+        mostVisitedPages: analyticsData[0].pageViews
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch analytics data' });
+    }
+  });
+
 module.exports = router;

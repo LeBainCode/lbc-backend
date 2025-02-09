@@ -9,14 +9,16 @@ const bcrypt = require('bcryptjs');
 // Admin middleware
 const adminMiddleware = async (req, res, next) => {
     try {
-        // Get token from header
-        const token = req.headers.authorization?.split(' ')[1];
+        const token = req.cookies.token;
+        console.log("Token from cookie:", token);
+        
         if (!token) {
             return res.status(401).json({ message: 'No token provided' });
         }
 
         // Verify token
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        console.log("Decoded token:", decoded);
         const user = await User.findById(decoded.userId);
 
         if (!user || user.role !== 'admin') {
@@ -34,13 +36,13 @@ const adminMiddleware = async (req, res, next) => {
 // Get user count endpoint
 router.get('/users/count', adminMiddleware, async (req, res) => {
     try {
-        const userCount = await User.countDocuments({ role: 'user' });
-        res.json({ count: userCount });
+      const userCount = await User.countDocuments({ role: 'user' });
+      res.json({ count: userCount });
     } catch (error) {
-        console.error('Error fetching user count:', error);
-        res.status(500).json({ message: 'Error fetching user count' });
+      console.error('Error fetching user count:', error);
+      res.status(500).json({ message: 'Error fetching user count' });
     }
-});
+  });
 
 // Get all prospects with sorting and filtering
 router.get('/prospects', adminMiddleware, async (req, res) => {
@@ -121,18 +123,15 @@ router.put('/prospects/:email/comment', adminMiddleware, async (req, res) => {
 // Get all regular users
 router.get('/users', adminMiddleware, async (req, res) => {
     try {
-        const users = await User.find({ 
-            role: 'user' 
-        })
+      const users = await User.find({ role: 'user' })
         .select('username email createdAt')
         .sort({ createdAt: -1 });
-        
-        res.json(users);
+      res.json(users);
     } catch (error) {
-        console.error('Error fetching users:', error);
-        res.status(500).json({ message: 'Error fetching users' });
+      console.error('Error fetching users:', error);
+      res.status(500).json({ message: 'Error fetching users' });
     }
-});
+  });
 
 // Enable beta access for a user
 router.post('/users/:userId/beta', adminMiddleware, async (req, res) => {
