@@ -12,21 +12,37 @@ const debug = (message, data) => {
 };
 
 // Auth check route
-router.get('/check', verifyToken, (req, res) => {
+router.get('/check', (req, res) => {
+  const token = req.cookies.token;
+  if (!token) {
+    // Return a normal JSON response instead of a 401 error
+    return res.json({ authenticated: false, user: null });
+  }
+
   try {
-    // Respond with the authenticated user's data
-    res.json({
-      authenticated: true,
-      user: {
-        id: req.user._id,
-        username: req.user.username,
-        role: req.user.role,
-        progress: req.user.progress,
-      },
-    });
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    User.findById(decoded.userId)
+      .then(user => {
+        if (!user) {
+          return res.json({ authenticated: false, user: null });
+        }
+        res.json({
+          authenticated: true,
+          user: {
+            id: user._id,
+            username: user.username,
+            role: user.role,
+            progress: user.progress
+          }
+        });
+      })
+      .catch(err => {
+        console.error('User lookup error:', err);
+        res.json({ authenticated: false, user: null });
+      });
   } catch (error) {
-    console.error('Error in /api/auth/check:', error);
-    res.status(500).json({ authenticated: false, message: 'Server error' });
+    console.error('Token verification error:', error);
+    res.json({ authenticated: false, user: null });
   }
 });
 
