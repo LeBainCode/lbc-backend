@@ -86,43 +86,53 @@ router.get('/data', adminMiddleware, async (req, res) => {
 });
 
 router.get('/frontend-data', verifyToken, async (req, res) => {
-  // Check if user is admin
   if (req.user.role !== 'admin') {
     return res.status(403).json({ message: 'Forbidden: Admin access required' });
   }
 
   try {
     const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  
-      const analyticsData = await Analytics.aggregate([
-        {
-          $match: {
-            date: { $gte: thirtyDaysAgo }
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            totalVisits: { $sum: '$totalVisits' },
-            uniqueVisitors: { $sum: '$uniqueVisitors' },
-            averageSessionDuration: { $avg: '$averageSessionDuration' },
-            bounceRate: { $avg: '$bounceRate' },
-            pageViews: { $push: '$pageViews' },
-          }
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const analyticsData = await Analytics.aggregate([
+      {
+        $match: {
+          date: { $gte: thirtyDaysAgo }
         }
-      ]);
-  
-      res.json({
-        totalVisits: analyticsData[0].totalVisits,
-        uniqueVisitors: analyticsData[0].uniqueVisitors,
-        averageSessionDuration: analyticsData[0].averageSessionDuration,
-        bounceRate: analyticsData[0].bounceRate,
-        mostVisitedPages: analyticsData[0].pageViews
+      },
+      {
+        $group: {
+          _id: null,
+          totalVisits: { $sum: '$totalVisits' },
+          uniqueVisitors: { $sum: '$uniqueVisitors' },
+          averageSessionDuration: { $avg: '$averageSessionDuration' },
+          bounceRate: { $avg: '$bounceRate' },
+          pageViews: { $push: '$pageViews' },
+        }
+      }
+    ]);
+
+    if (!analyticsData[0]) {
+      return res.json({
+        totalVisits: 0,
+        uniqueVisitors: 0,
+        averageSessionDuration: 0,
+        bounceRate: 0,
+        mostVisitedPages: []
       });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch analytics data' });
     }
-  });
+
+    res.json({
+      totalVisits: analyticsData[0].totalVisits,
+      uniqueVisitors: analyticsData[0].uniqueVisitors,
+      averageSessionDuration: analyticsData[0].averageSessionDuration,
+      bounceRate: analyticsData[0].bounceRate,
+      mostVisitedPages: analyticsData[0].pageViews
+    });
+  } catch (error) {
+    console.error('Analytics data fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch analytics data' });
+  }
+});
 
 module.exports = router;
