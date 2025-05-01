@@ -30,7 +30,7 @@ app.use((req, res, next) => {
 // Middleware
 app.use(express.json());
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://lebaincodefront.vercel.app, https://frontend-swart-tau-76.vercel.app'],
+  origin: ['http://localhost:3000', 'https://lebaincodefront.vercel.app', 'https://frontend-swart-tau-76.vercel.app'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'Accept'],
