@@ -29,13 +29,26 @@ app.use((req, res, next) => {
 
 // Middleware
 app.use(express.json());
+
+// CORS configuration: allowed origins now include localhost, your previous Vercel origins, and your new domain.
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://lebaincodefront.vercel.app', 'https://frontend-swart-tau-76.vercel.app'],
+  origin: [
+    'http://localhost:3000',
+    'https://lebaincodefront.vercel.app',
+    'https://frontend-swart-tau-76.vercel.app',
+    'https://www.lebaincode.com'
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'Accept'],
   exposedHeaders: ['Set-Cookie']
 }));
+
+// Handle all preflight requests
+app.options('*', cors());
+
+// In case you are behind a reverse proxy, trust the proxy
+app.set('trust proxy', 1);
 
 app.use(passport.initialize());
 app.use(cookieParser());
@@ -57,7 +70,6 @@ app.use(session({
   }
 }));
 
-
 app.use(passport.session());
 
 // Configure GitHub strategy
@@ -68,7 +80,6 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api', require('./routes/email'));
 app.use('/api/admin/analytics', require('./routes/analytics'));
-
 
 // Development-only routes
 if (process.env.NODE_ENV === 'development') {
