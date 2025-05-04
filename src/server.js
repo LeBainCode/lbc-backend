@@ -44,6 +44,7 @@ app.use(cors({
   exposedHeaders: ['Set-Cookie']
 }));
 
+
 // Handle all preflight requests
 app.options('*', cors());
 
@@ -167,6 +168,34 @@ app.use((err, req, res, next) => {
     error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
   });
 });
+
+// Add static file serving
+app.use(express.static('public'));
+
+// root route server running confirmation 
+app.get('/', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Le Bain Code API</title>
+      <style>
+        /* Same styles as before */
+        .logo-image {
+          max-width: 200px;
+          margin-bottom: 20px;
+        }
+      </style>
+    </head>
+    <body>
+      <img src="/logo.png" alt="Le Bain Code" class="logo-image">
+      <div class="logo">Le Bain Code</div>
+      <div class="message">API server is running correctly</div>
+    </body>
+    </html>
+  `);
+});
+
 
 // Database connection
 mongoose.connect(process.env.MONGODB_URI)
