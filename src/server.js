@@ -30,12 +30,10 @@ app.use((req, res, next) => {
 // Middleware
 app.use(express.json());
 
-// CORS configuration: allowed origins now include localhost, your previous Vercel origins, and your new domain.
+// CORS configuration: allowed origins now include localhost, your Vercel origins, and your domain.
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'https://lebaincodefront.vercel.app',
-    'https://frontend-swart-tau-76.vercel.app',
     'https://www.lebaincode.com'
   ],
   credentials: true,
@@ -44,8 +42,7 @@ app.use(cors({
   exposedHeaders: ['Set-Cookie']
 }));
 
-
-// Handle all preflight requests
+// Handle preflight requests
 app.options('*', cors());
 
 // In case you are behind a reverse proxy, trust the proxy
@@ -79,7 +76,7 @@ configureGitHubStrategy();
 // Routes 
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/admin', require('./routes/admin'));
-app.use('/api', require('./routes/email'));
+app.use('/api/email', require('./routes/email'));
 app.use('/api/admin/analytics', require('./routes/analytics'));
 
 // Development-only routes
@@ -123,6 +120,11 @@ if (process.env.NODE_ENV === 'development') {
     res.json({ session: req.session });
   });
 }
+
+console.log("GitHub OAuth settings check:");
+console.log("Client ID:", process.env.GITHUB_CLIENT_ID ? "Set" : "Missing");
+console.log("Client Secret:", process.env.GITHUB_CLIENT_SECRET ? "Set" : "Missing");
+console.log("Callback URL:", `${process.env.BACKEND_URL}/api/auth/github/callback`);
 
 // Health check route
 app.get('/api/health', (req, res) => {
@@ -169,10 +171,10 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Add static file serving
+// Serve static files from the public folder
 app.use(express.static('public'));
 
-// root route server running confirmation 
+// Root route (server confirmation)
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -180,11 +182,10 @@ app.get('/', (req, res) => {
     <head>
       <title>Le Bain Code API</title>
       <style>
-        /* Same styles as before */
-        .logo-image {
-          max-width: 200px;
-          margin-bottom: 20px;
-        }
+        body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #f5f5f5; color: #333; }
+        .logo-image { max-width: 200px; margin-bottom: 20px; }
+        .logo { font-size: 3rem; font-weight: bold; margin-bottom: 20px; color: #0066cc; }
+        .message { font-size: 1.2rem; }
       </style>
     </head>
     <body>
@@ -196,7 +197,6 @@ app.get('/', (req, res) => {
   `);
 });
 
-
 // Database connection
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
@@ -205,7 +205,7 @@ mongoose.connect(process.env.MONGODB_URI)
     process.exit(1);
   });
 
-// Start server
+// Start the server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`\n=== Server Started ===`);
