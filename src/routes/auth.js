@@ -100,7 +100,7 @@ router.get('/github/callback', (req, res, next) => {
         maxAge: 24 * 60 * 60 * 1000, // Cookie valid for 1 day.
       });
       // Redirect to the frontend's dashboard.
-      return res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
+      return res.redirect(`${process.env.FRONTEND_URL}/auth/callback`);
     } catch (error) {
       console.error('Token generation error:', error);
       return res.redirect(`${process.env.FRONTEND_URL}/login?error=token_failed`);
