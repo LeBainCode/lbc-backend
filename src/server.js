@@ -11,10 +11,52 @@ const WebSocket = require('ws');
 const passport = require('passport');
 const { configureGitHubStrategy } = require('./config/passport');
 const cookieParser = require('cookie-parser');
+const swaggerJsdoc = require('swagger-jsdoc');
+const swaggerUi = require('swagger-ui-express');
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
+
+// Swagger configuration
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'Le Bain Code API',
+      version: '1.0.0',
+      description: 'Official API documentation for the Le Bain Code platform',
+      contact: {
+        name: 'Le Bain Code',
+        url: 'https://www.lebaincode.com',
+      },
+    },
+    servers: [
+      {
+        url: process.env.NODE_ENV === 'production' 
+          ? 'https://lebaincode-backend.onrender.com'
+          : `http://localhost:${process.env.PORT || 5000}`,
+        description: process.env.NODE_ENV === 'production' ? 'Production server' : 'Development server',
+      },
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+        },
+      },
+    },
+    security: [{
+      bearerAuth: [],
+    }],
+  },
+  apis: ['./src/routes/*.js'], // Path to the API routes including swagger.js
+};
+
+// Initialize swagger-jsdoc
+const specs = swaggerJsdoc(swaggerOptions);
 
 // Middleware for logging requests
 app.use((req, res, next) => {
@@ -72,6 +114,15 @@ app.use(passport.session());
 
 // Configure GitHub strategy
 configureGitHubStrategy();
+
+// Serve swagger docs - place this before your routes
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs, { 
+  explorer: true,
+  customCss: '.swagger-ui .topbar { display: none }',
+  swaggerOptions: {
+    persistAuthorization: true,
+  }
+}));
 
 // Routes 
 app.use('/api/auth', require('./routes/auth'));
@@ -186,12 +237,15 @@ app.get('/', (req, res) => {
         .logo-image { max-width: 200px; margin-bottom: 20px; }
         .logo { font-size: 3rem; font-weight: bold; margin-bottom: 20px; color: #0066cc; }
         .message { font-size: 1.2rem; }
+        .swagger-link { margin-top: 20px; padding: 10px 20px; background-color: #0066cc; color: white; text-decoration: none; border-radius: 4px; }
+        .swagger-link:hover { background-color: #0052a3; }
       </style>
     </head>
     <body>
       <img src="/logo.png" alt="Le Bain Code" class="logo-image">
       <div class="logo">Le Bain Code</div>
       <div class="message">API server is running correctly</div>
+      <a href="/api-docs" class="swagger-link">View API Documentation</a>
     </body>
     </html>
   `);
@@ -214,4 +268,6 @@ server.listen(PORT, () => {
   console.log('BACKEND_URL:', process.env.BACKEND_URL);
   console.log('FRONTEND_URL:', process.env.FRONTEND_URL);
   console.log('GitHub callback URL:', `${process.env.BACKEND_URL}/api/auth/github/callback`);
+  console.log('Swagger API documentation available at:', `http://localhost:${PORT}/api-docs`);
+  console.log('Production Swagger documentation at:', `https://lebaincode-backend.onrender.com/api-docs`);
 });
