@@ -47,6 +47,182 @@ router.get('/all', authMiddleware, async (req, res) => {
 });
 
 /*
+  GET /api/email/users/public
+  - Retrieves user emails without requiring admin authentication
+  - Limited fields for security and pagination for performance
+*/
+router.get('/users/public', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+    
+    const users = await User.find({}, 'email username createdAt')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .exec();
+      
+    const usersWithEmail = users.filter(user => user.email);
+    const total = await User.countDocuments({ email: { $exists: true, $ne: null } });
+    
+    res.json({
+      success: true,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      users: usersWithEmail.map(user => ({
+        username: user.username,
+        email: user.email,
+        createdAt: user.createdAt
+      }))
+    });
+  } catch (error) {
+    console.error('Error retrieving public user emails:', error);
+    res.status(500).json({ 
+      error: 'Failed to retrieve user emails',
+      details: error.message 
+    });
+  }
+});
+
+/*
+  GET /api/email/users/:username
+  - Retrieves a specific user's email by username
+*/
+router.get('/users/:username', async (req, res) => {
+  try {
+    const { username } = req.params;
+    const user = await User.findOne({ username }, 'email username');
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({
+      success: true,
+      user: {
+        username: user.username,
+        email: user.email || null
+      }
+    });
+  } catch (error) {
+    console.error('Error retrieving user email:', error);
+    res.status(500).json({ 
+      error: 'Failed to retrieve user email',
+      details: error.message 
+    });
+  }
+});
+
+/*
+  GET /api/email/prospects/public
+  - Retrieves prospect emails without requiring admin authentication
+  - Includes pagination
+*/
+router.get('/prospects/public', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+    
+    const prospects = await Prospect.find({}, 'email type createdAt')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .exec();
+      
+    const total = await Prospect.countDocuments();
+    
+    res.json({
+      success: true,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      prospects: prospects.map(prospect => ({
+        email: prospect.email,
+        type: prospect.type,
+        createdAt: prospect.createdAt
+      }))
+    });
+  } catch (error) {
+    console.error('Error retrieving public prospect emails:', error);
+    res.status(500).json({ 
+      error: 'Failed to retrieve prospect emails',
+      details: error.message 
+    });
+  }
+});
+
+/*
+  GET /api/email/prospects/:email
+  - Checks if a specific prospect email exists
+*/
+router.get('/prospects/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    const prospect = await Prospect.findOne({ email }, 'email createdAt');
+    
+    if (!prospect) {
+      return res.json({ exists: false });
+    }
+    
+    res.json({
+      exists: true,
+      prospect: {
+        email: prospect.email,
+        createdAt: prospect.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('Error checking prospect email:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/*
+  GET /api/email/settings-data
+  - Retrieves combined email data needed for frontend settings pages
+*/
+router.get('/settings-data', async (req, res) => {
+  try {
+    // Get recent users with emails
+    const users = await User.find({ email: { $exists: true, $ne: null } }, 'email username createdAt')
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .exec();
+      
+    // Get recent prospects
+    const prospects = await Prospect.find({}, 'email type createdAt')
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .exec();
+      
+    res.json({
+      success: true,
+      users: users.map(user => ({
+        username: user.username,
+        email: user.email,
+        createdAt: user.createdAt
+      })),
+      prospects: prospects.map(prospect => ({
+        email: prospect.email,
+        type: prospect.type,
+        createdAt: prospect.createdAt
+      }))
+    });
+  } catch (error) {
+    console.error('Error retrieving settings data:', error);
+    res.status(500).json({ 
+      error: 'Failed to retrieve settings data',
+      details: error.message 
+    });
+  }
+});
+
+/*
   POST /api/email/check-user
   - Check if an email exists in the User collection
 */
@@ -142,6 +318,130 @@ router.post('/prospect', async (req, res) => {
     console.error('Error saving prospect email:', error);
     res.status(500).json({ 
       error: 'Failed to save prospect email',
+      details: error.message 
+    });
+  }
+});
+
+/*
+  POST /api/email/user
+  - Saves a user's email without requiring them to be logged in
+  - Useful for collecting emails from users before they fully register
+*/
+router.post('/user', async (req, res) => {
+  try {
+    const { email, username } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+    
+    if (!username) {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+    
+    // Check if email already exists
+    const existingEmailUser = await User.findOne({ email });
+    if (existingEmailUser) {
+      return res.status(409).json({ 
+        error: 'Email already registered to a user',
+        exists: true,
+        username: existingEmailUser.username
+      });
+    }
+    
+    // Check if username exists
+    const existingUser = await User.findOne({ username });
+    if (!existingUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Update the user's email
+    existingUser.email = email;
+    await existingUser.save();
+    
+    res.json({
+      success: true,
+      message: 'Email saved successfully',
+      user: {
+        username: existingUser.username,
+        email: existingUser.email
+      }
+    });
+  } catch (error) {
+    console.error('Error saving user email:', error);
+    res.status(500).json({ 
+      error: 'Failed to save user email',
+      details: error.message 
+    });
+  }
+});
+
+/*
+  POST /api/email/users/bulk-update
+  - Updates multiple user emails at once
+  - Useful for settings pages where admins might batch update emails
+*/
+router.post('/users/bulk-update', async (req, res) => {
+  try {
+    const { updates } = req.body;
+    
+    if (!Array.isArray(updates)) {
+      return res.status(400).json({ error: 'Updates must be an array' });
+    }
+    
+    const results = [];
+    
+    // Process each update sequentially to avoid race conditions
+    for (const update of updates) {
+      const { username, email } = update;
+      
+      if (!username || !email) {
+        results.push({ 
+          username, 
+          success: false, 
+          error: 'Username and email are required' 
+        });
+        continue;
+      }
+      
+      try {
+        const user = await User.findOne({ username });
+        
+        if (!user) {
+          results.push({ 
+            username, 
+            success: false, 
+            error: 'User not found' 
+          });
+          continue;
+        }
+        
+        user.email = email;
+        await user.save();
+        
+        results.push({
+          username,
+          email,
+          success: true
+        });
+      } catch (updateError) {
+        results.push({
+          username,
+          success: false,
+          error: updateError.message
+        });
+      }
+    }
+    
+    res.json({
+      success: true,
+      results
+    });
+  } catch (error) {
+    console.error('Error performing bulk email update:', error);
+    res.status(500).json({ 
+      error: 'Failed to update emails',
       details: error.message 
     });
   }
