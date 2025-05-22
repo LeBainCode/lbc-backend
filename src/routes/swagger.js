@@ -41,12 +41,11 @@ const swaggerOptions = {
   // These files should include your JSDoc Swagger comments.
   // (Ensure that your route files—email.js, auth.js, admin.js, analytics.js—have up-to-date annotations.)
   apis: [
+    './src/routes/lbcSwagger.js', 
     './src/routes/email.js',
     './src/routes/auth.js',
     './src/routes/admin.js',
     './src/routes/analytics.js'
-    // Optionally, include your global Swagger annotations file if you rename it to .js:
-    // './src/lbcSwagger.js'
   ],
 };
 
