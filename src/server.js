@@ -5,60 +5,24 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
-const jwt = require('jsonwebtoken');
 const http = require('http');
 const WebSocket = require('ws');
 const passport = require('passport');
 const { configureGitHubStrategy } = require('./config/passport');
 const cookieParser = require('cookie-parser');
-const swaggerJsdoc = require('swagger-jsdoc');
-const swaggerUi = require('swagger-ui-express');
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Swagger configuration
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Le Bain Code API',
-      version: '1.0.0',
-      description: 'Official API documentation for the Le Bain Code platform',
-      contact: {
-        name: 'Le Bain Code',
-        url: 'https://www.lebaincode.com',
-      },
-    },
-    servers: [
-      {
-        url: process.env.NODE_ENV === 'production' 
-          ? 'https://lebaincode-backend.onrender.com'
-          : `http://localhost:${process.env.PORT || 5000}`,
-        description: process.env.NODE_ENV === 'production' ? 'Production server' : 'Development server',
-      },
-    ],
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT',
-        },
-      },
-    },
-    security: [{
-      bearerAuth: [],
-    }],
-  },
-  apis: ['./src/routes/*.js'], // Path to the API routes including swagger.js
-};
+// Import the dedicated Swagger router
+const swaggerRouter = require('./routes/swagger');
 
-// Initialize swagger-jsdoc
-const specs = swaggerJsdoc(swaggerOptions);
+// ---------------------------------------------------
+// Middleware & Configuration
+// ---------------------------------------------------
 
-// Middleware for logging requests
+// Logging middleware: logs each request
 app.use((req, res, next) => {
   console.log('\n=== Incoming Request ===');
   console.log('Time:', new Date().toISOString());
@@ -69,10 +33,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// Middleware
+// Parse JSON bodies
 app.use(express.json());
 
-// CORS configuration: allowed origins now include localhost, your Vercel origins, and your domain.
+// CORS configuration: allow localhost and your production domain
 app.use(cors({
   origin: [
     'http://localhost:3000',
@@ -83,64 +47,61 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'Accept'],
   exposedHeaders: ['Set-Cookie']
 }));
-
-// Handle preflight requests
 app.options('*', cors());
 
-// In case you are behind a reverse proxy, trust the proxy
+// Trust the proxy if behind one
 app.set('trust proxy', 1);
 
 app.use(passport.initialize());
 app.use(cookieParser());
 
-// Session configuration
+// Session configuration with MongoDB store
 app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   store: MongoStore.create({
     mongoUrl: process.env.MONGODB_URI,
-    ttl: 24 * 60 * 60
+    ttl: 24 * 60 * 60  // 24 hours
   }),
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    maxAge: 24 * 60 * 60 * 1000
+    maxAge: 24 * 60 * 60 * 1000 // 1 day in milliseconds
   }
 }));
 
 app.use(passport.session());
-
-// Configure GitHub strategy
 configureGitHubStrategy();
 
-// Serve swagger docs - place this before your routes
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs, { 
-  explorer: true,
-  customCss: '.swagger-ui .topbar { display: none }',
-  swaggerOptions: {
-    persistAuthorization: true,
-  }
-}));
+// ---------------------------------------------------
+// Swagger Documentation
+// ---------------------------------------------------
 
-// Routes 
+// Mount the dedicated Swagger router at /api-docs
+app.use('/api-docs', swaggerRouter);
+
+// ---------------------------------------------------
+// API Routes
+// ---------------------------------------------------
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/email', require('./routes/email'));
 app.use('/api/admin/analytics', require('./routes/analytics'));
 
-// Development-only routes
+// ---------------------------------------------------
+// Development-Only Routes
+// ---------------------------------------------------
 if (process.env.NODE_ENV === 'development') {
   app.post('/api/auth/test-user', async (req, res) => {
     try {
       const User = require('./models/User');
       console.log('Creating test user...');
-      
+
       const latestUser = await User.findOne({ role: 'user' })
         .sort({ username: -1 });
-      
-      const newUserNumber = latestUser 
+      const newUserNumber = latestUser
         ? String(Number(latestUser.username) + 1).padStart(3, '0')
         : '001';
 
@@ -152,12 +113,11 @@ if (process.env.NODE_ENV === 'development') {
           examModule: { completed: 0, total: 4, isUnlocked: false }
         }
       });
-      
+
       console.log('Test user created:', {
         id: testUser._id,
         username: testUser.username
       });
-      
       res.json(testUser);
     } catch (err) {
       console.error('Test user creation error:', err);
@@ -177,25 +137,27 @@ console.log("Client ID:", process.env.GITHUB_CLIENT_ID ? "Set" : "Missing");
 console.log("Client Secret:", process.env.GITHUB_CLIENT_SECRET ? "Set" : "Missing");
 console.log("Callback URL:", `${process.env.BACKEND_URL}/api/auth/github/callback`);
 
-// Health check route
+// ---------------------------------------------------
+// Health Check & Verification Routes
+// ---------------------------------------------------
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
 app.get('/api/auth/verify-session', (req, res) => {
-  console.log('Token from cookies:', req.cookies.token); 
+  console.log('Token from cookies:', req.cookies.token);
   res.send('Check the console for the token');
 });
 
-// WebSocket setup with logging
+// ---------------------------------------------------
+// WebSocket Setup
+// ---------------------------------------------------
 wss.on('connection', (ws) => {
   console.log('\n=== New WebSocket Connection ===');
-  
   ws.on('message', (message) => {
     try {
       const { type, data } = JSON.parse(message.toString());
       console.log('WebSocket message received:', { type, data });
-      
       wss.clients.forEach(client => {
         if (client !== ws && client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify({ type, data }));
@@ -205,27 +167,28 @@ wss.on('connection', (ws) => {
       console.error('WebSocket message error:', error);
     }
   });
-
   ws.on('error', (error) => {
     console.error('WebSocket error:', error);
   });
 });
 
-// Error handling middleware
+// ---------------------------------------------------
+// Error Handling Middleware
+// ---------------------------------------------------
 app.use((err, req, res, next) => {
   console.error('\n=== Error Handler ===');
   console.error('Error:', err);
   console.error('Stack:', err.stack);
-  
   res.status(500).json({
     error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
   });
 });
 
-// Serve static files from the public folder
+// ---------------------------------------------------
+// Static Files & Root Route
+// ---------------------------------------------------
 app.use(express.static('public'));
 
-// Root route (server confirmation)
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -251,7 +214,9 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Database connection
+// ---------------------------------------------------
+// Database Connection & Server Startup
+// ---------------------------------------------------
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => {
@@ -259,7 +224,6 @@ mongoose.connect(process.env.MONGODB_URI)
     process.exit(1);
   });
 
-// Start the server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`\n=== Server Started ===`);
