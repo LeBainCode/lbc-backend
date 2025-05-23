@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const swaggerJsdoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
+const path = require('path'); // Add this line - you're missing the path module
 
 // Set up Swagger options including global API info and security components.
 const swaggerOptions = {
@@ -39,13 +40,15 @@ const swaggerOptions = {
     }],
   },
   // These files should include your JSDoc Swagger comments.
-  // (Ensure that your route files—email.js, auth.js, admin.js, analytics.js—have up-to-date annotations.)
   apis: [
     './src/routes/lbcSwagger.js', 
     './src/routes/email.js',
     './src/routes/auth.js',
     './src/routes/admin.js',
-    './src/routes/analytics.js'
+    './src/routes/analytics.js',
+    './src/routes/modules.js',
+    './src/routes/beta.js',
+    './src/routes/dashboard.js'
   ],
 };
 
