@@ -48,7 +48,8 @@ const swaggerOptions = {
     './src/routes/analytics.js',
     './src/routes/modules.js',
     './src/routes/beta.js',
-    './src/routes/dashboard.js'
+    './src/routes/dashboard.js',
+    './src/routes/security.js'
   ],
 };
 
