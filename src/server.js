@@ -89,6 +89,9 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/email', require('./routes/email'));
 app.use('/api/admin/analytics', require('./routes/analytics'));
+app.use('/api/modules', require('./routes/modules'));
+app.use('/api/beta', require('./routes/beta'));
+app.use('/api/dashboard', require('./routes/dashboard'));
 
 // ---------------------------------------------------
 // Development-Only Routes
