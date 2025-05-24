@@ -41,6 +41,7 @@ const swaggerOptions = {
   },
   // These files should include your JSDoc Swagger comments.
   apis: [
+    './src/routes/schemas.js',
     './src/routes/lbcSwagger.js', 
     './src/routes/email.js',
     './src/routes/auth.js',
