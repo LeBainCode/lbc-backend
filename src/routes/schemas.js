@@ -288,20 +288,7 @@
  *         testScore: 70
  *         testPassed: true
  *     
- *     SecuritySettings:
- *       type: object
- *       properties:
- *         twoFactorEnabled:
- *           type: boolean
- *         notifyOnLogin:
- *           type: boolean
- *         ipRestriction:
- *           type: string
- *           nullable: true
- *       example:
- *         twoFactorEnabled: false
- *         notifyOnLogin: true
- *         ipRestriction: null
+ *
  *
  *     SecurityScore:
  *       type: object

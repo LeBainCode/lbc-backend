@@ -6,7 +6,8 @@
     "start": "NODE_ENV=production node src/server.js",
     "dev": "NODE_ENV=development nodemon src/server.js",
     "create-admin": "node src/scripts/createAdmin.js",
-    "swagger:generate": "node src/scripts/swagger-generate.js"
+    "swagger:generate": "node src/scripts/swagger-generate.js",
+    "seed": "node src/scripts/seedModules.js"
   },
   "dependencies": {
     "axios": "^1.7.9",
