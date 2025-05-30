@@ -930,13 +930,23 @@ userSchema.virtual('id').get(function() {
 
 userSchema.virtual('isActive').get(function() {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  return this.security.lastLogin && this.security.lastLogin > thirtyDaysAgo;
+  // Add null checks - this prevents the error
+  return this.security && this.security.lastLogin && this.security.lastLogin > thirtyDaysAgo;
 });
 
 userSchema.virtual('completionRate').get(function() {
-  if (!this.progress.modules.length) return 0;
-  const completedModules = this.progress.modules.filter(m => m.completed).length;
-  return Math.round((completedModules / this.progress.modules.length) * 100);
+  // Add comprehensive null checks - THIS IS THE LINE CAUSING THE ERROR
+  if (!this.progress || !this.progress.modules || !Array.isArray(this.progress.modules) || this.progress.modules.length === 0) {
+    return 0;
+  }
+  
+  try {
+    const completedModules = this.progress.modules.filter(m => m && m.completed).length;
+    return Math.round((completedModules / this.progress.modules.length) * 100);
+  } catch (error) {
+    console.error('Error calculating completion rate:', error);
+    return 0;
+  }
 });
 
 // ===========================================
