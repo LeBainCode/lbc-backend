@@ -1,8 +1,7 @@
 /**
  * src/routes/auth.js
  *
- * This file defines the authentication routes for the application.
- * It includes routes for checking authentication, GitHub OAuth, local admin login,
+ * Authentication routes for the application including GitHub OAuth, local admin login,
  * logout, and session verification. In development, a test-user route is available.
  */
 
@@ -11,17 +10,69 @@ const passport = require('passport');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
-const verifyToken = require('../middleware/verifyToken'); // Middleware to verify JWT tokens
+const verifyToken = require('../middleware/verifyToken');
 
-// Debug logger function to assist with logging inside routes.
+/**
+ * @swagger
+ * tags:
+ *   name: Authentication
+ *   description: User authentication including GitHub OAuth and admin login
+ */
+
 const debug = (message, data) => {
   console.log(`[Auth Route] ${message}`, data || '');
 };
 
 /**
- * GET /check
- * Checks if the user is authenticated by verifying the JWT token stored in cookies.
- * Returns a JSON response indicating whether the user is authenticated and, if so, some user data.
+ * @swagger
+ * /api/auth/check:
+ *   get:
+ *     summary: Check if the user is authenticated
+ *     description: Verifies the JWT token stored in cookies and returns authentication status
+ *     tags: [Authentication]
+ *     responses:
+ *       200:
+ *         description: Authentication status checked successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 authenticated:
+ *                   type: boolean
+ *                   description: Whether the user is authenticated
+ *                 user:
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       description: User ID
+ *                     username:
+ *                       type: string
+ *                       description: Username
+ *                     role:
+ *                       type: string
+ *                       enum: [user, beta, admin]
+ *                       description: User role
+ *                     progress:
+ *                       type: object
+ *                       description: User progress data
+ *             examples:
+ *               authenticated:
+ *                 summary: Authenticated user
+ *                 value:
+ *                   authenticated: true
+ *                   user:
+ *                     id: "60d21b4967d0d8992e610c85"
+ *                     username: "001"
+ *                     role: "user"
+ *                     progress: {}
+ *               unauthenticated:
+ *                 summary: Unauthenticated user
+ *                 value:
+ *                   authenticated: false
+ *                   user: null
  */
 router.get('/check', (req, res) => {
   const token = req.cookies.token;
@@ -56,8 +107,21 @@ router.get('/check', (req, res) => {
 });
 
 /**
- * GET /github
- * Starts the GitHub OAuth authentication flow.
+ * @swagger
+ * /api/auth/github:
+ *   get:
+ *     summary: Initiate GitHub OAuth authentication flow
+ *     description: Redirects the user to GitHub for OAuth authentication
+ *     tags: [Authentication]
+ *     responses:
+ *       302:
+ *         description: Redirects to GitHub authorization page
+ *         headers:
+ *           Location:
+ *             description: GitHub OAuth URL
+ *             schema:
+ *               type: string
+ *               example: "https://github.com/login/oauth/authorize?client_id=..."
  */
 router.get('/github', (req, res, next) => {
   debug('Starting GitHub authentication');
@@ -68,9 +132,46 @@ router.get('/github', (req, res, next) => {
 });
 
 /**
- * GET /github/callback
- * Handles the callback from GitHub OAuth.
- * On success, it generates a JWT token, sets it as an HTTP-only cookie, and redirects the user to the dashboard.
+ * @swagger
+ * /api/auth/github/callback:
+ *   get:
+ *     summary: Handle GitHub OAuth callback
+ *     description: Processes the callback from GitHub OAuth, generates JWT token, and redirects to frontend
+ *     tags: [Authentication]
+ *     parameters:
+ *       - in: query
+ *         name: code
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: GitHub authorization code
+ *       - in: query
+ *         name: state
+ *         schema:
+ *           type: string
+ *         description: OAuth state parameter
+ *     responses:
+ *       302:
+ *         description: Successful authentication - redirects to frontend dashboard
+ *         headers:
+ *           Set-Cookie:
+ *             description: JWT token set as HTTP-only cookie
+ *             schema:
+ *               type: string
+ *               example: "token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; HttpOnly; Secure; SameSite=None; Max-Age=86400"
+ *           Location:
+ *             description: Frontend callback URL
+ *             schema:
+ *               type: string
+ *               example: "https://frontend.com/auth/callback"
+ *       401:
+ *         description: Authentication failed - redirects to login with error
+ *         headers:
+ *           Location:
+ *             description: Frontend login URL with error parameter
+ *             schema:
+ *               type: string
+ *               example: "https://frontend.com/login?error=auth_failed"
  */
 router.get('/github/callback', (req, res, next) => {
   passport.authenticate('github', {
@@ -86,20 +187,17 @@ router.get('/github/callback', (req, res, next) => {
       return res.redirect(`${process.env.FRONTEND_URL}/login?error=no_user`);
     }
     try {
-      // Generate JWT token for the authenticated user.
       const token = jwt.sign(
         { userId: user._id },
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );
-      // Set the token in an HTTP-only cookie.
       res.cookie('token', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-        maxAge: 24 * 60 * 60 * 1000, // Cookie valid for 1 day.
+        maxAge: 24 * 60 * 60 * 1000,
       });
-      // Redirect to the frontend's dashboard.
       return res.redirect(`${process.env.FRONTEND_URL}/auth/callback`);
     } catch (error) {
       console.error('Token generation error:', error);
@@ -109,36 +207,119 @@ router.get('/github/callback', (req, res, next) => {
 });
 
 /**
- * POST /login
- * Admin login route for local/form-based authentication.
- * Validates credentials, generates a JWT token, updates the user's login history,
- * and sets the token in an HTTP-only cookie.
+ * @swagger
+ * /api/auth/login:
+ *   post:
+ *     summary: Admin login with username and password
+ *     description: Authenticates admin users with credentials, generates JWT token, and updates login history
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - password
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 description: Admin username
+ *                 example: "admin"
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 description: Admin password
+ *                 example: "SecurePassword123!"
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         headers:
+ *           Set-Cookie:
+ *             description: JWT token set as HTTP-only cookie
+ *             schema:
+ *               type: string
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Login successful"
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       example: "60d21b4967d0d8992e610c85"
+ *                     username:
+ *                       type: string
+ *                       example: "admin"
+ *                     role:
+ *                       type: string
+ *                       example: "admin"
+ *                     progress:
+ *                       type: object
+ *       400:
+ *         description: Invalid credentials
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Invalid credentials"
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Server error"
  */
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    const user = await User.findOne({ username });
+    
+    // Add validation
+    if (!username || !password) {
+      return res.status(400).json({ message: 'Username and password are required' });
+    }
+    
+    // CRITICAL FIX: Add .select('+password') to get the password field
+    const user = await User.findOne({ username }).select('+password');
+    
     if (!user || user.role !== 'admin') {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
+    
+    // Check if password exists before comparing
+    if (!user.password) {
+      console.log('User has no password set:', username);
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+    
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
-    // Generate a JWT token.
     const token = jwt.sign(
       { userId: user._id },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
-    // Set the token in an HTTP-only cookie.
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      maxAge: 24 * 60 * 60 * 1000 // 1 day.
+      maxAge: 24 * 60 * 60 * 1000
     });
-    // Update user's login history.
     user.security = {
       lastLogin: new Date(),
       loginHistory: [
@@ -168,9 +349,76 @@ router.post('/login', async (req, res) => {
 });
 
 /**
- * GET /user/profile
- * Fetches the authenticated user's detailed profile information.
- * Protected by the verifyToken middleware to ensure only authenticated users can access it.
+ * @swagger
+ * /api/auth/user/profile:
+ *   get:
+ *     summary: Get authenticated user's detailed profile
+ *     description: Retrieves comprehensive profile information for the authenticated user
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User profile retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       example: "60d21b4967d0d8992e610c85"
+ *                     username:
+ *                       type: string
+ *                       example: "001"
+ *                     role:
+ *                       type: string
+ *                       enum: [user, beta, admin]
+ *                       example: "user"
+ *                     progress:
+ *                       type: object
+ *                       description: User's learning progress
+ *                     security:
+ *                       type: object
+ *                       nullable: true
+ *                       properties:
+ *                         lastLogin:
+ *                           type: string
+ *                           format: date-time
+ *                           nullable: true
+ *       401:
+ *         description: Unauthorized - invalid or missing token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Unauthorized"
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "User not found"
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Server error"
  */
 router.get('/user/profile', verifyToken, async (req, res) => {
   try {
@@ -197,9 +445,48 @@ router.get('/user/profile', verifyToken, async (req, res) => {
 });
 
 /**
- * GET /verify-session
- * Protected route that verifies if the user is authenticated.
- * The verifyToken middleware checks the token, and if valid, the route returns the user data.
+ * @swagger
+ * /api/auth/verify-session:
+ *   get:
+ *     summary: Verify user session
+ *     description: Protected route that verifies if the user's session is valid
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Session is valid
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 authenticated:
+ *                   type: boolean
+ *                   example: true
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       example: "60d21b4967d0d8992e610c85"
+ *                     username:
+ *                       type: string
+ *                       example: "001"
+ *                     role:
+ *                       type: string
+ *                       enum: [user, beta, admin]
+ *                       example: "user"
+ *       401:
+ *         description: Unauthorized - invalid or expired token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Unauthorized"
  */
 router.get('/verify-session', verifyToken, (req, res) => {
   res.json({
@@ -213,8 +500,29 @@ router.get('/verify-session', verifyToken, (req, res) => {
 });
 
 /**
- * POST /logout
- * Logs out the user by clearing the authentication cookie.
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     summary: Log out the current user
+ *     description: Clears the authentication cookie to log out the user
+ *     tags: [Authentication]
+ *     responses:
+ *       200:
+ *         description: Logged out successfully
+ *         headers:
+ *           Set-Cookie:
+ *             description: Clears the authentication token cookie
+ *             schema:
+ *               type: string
+ *               example: "token=; HttpOnly; Secure; SameSite=None; Max-Age=0"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Logged out successfully"
  */
 router.post('/logout', (req, res) => {
   res.clearCookie('token', {
@@ -226,11 +534,77 @@ router.post('/logout', (req, res) => {
 });
 
 /**
- * Development-only routes.
- * These routes are only available when NODE_ENV is set to "development".
+ * Development-only routes - Only available when NODE_ENV is set to "development"
  */
 if (process.env.NODE_ENV === 'development') {
-  // Route to create a test user for development purposes.
+  /**
+   * @swagger
+   * /api/auth/test-user:
+   *   post:
+   *     summary: Create a test user (Development only)
+   *     description: Creates a test user for development purposes. Only available in development environment.
+   *     tags: [Authentication]
+   *     responses:
+   *       200:
+   *         description: Test user created successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 _id:
+   *                   type: string
+   *                   example: "60d21b4967d0d8992e610c85"
+   *                 username:
+   *                   type: string
+   *                   example: "001"
+   *                 githubId:
+   *                   type: string
+   *                   example: "test1640995200000"
+   *                 role:
+   *                   type: string
+   *                   example: "user"
+   *                 progress:
+   *                   type: object
+   *                   properties:
+   *                     cModule:
+   *                       type: object
+   *                       properties:
+   *                         completed:
+   *                           type: number
+   *                           example: 0
+   *                         total:
+   *                           type: number
+   *                           example: 10
+   *                     examModule:
+   *                       type: object
+   *                       properties:
+   *                         completed:
+   *                           type: number
+   *                           example: 0
+   *                         total:
+   *                           type: number
+   *                           example: 4
+   *                         isUnlocked:
+   *                           type: boolean
+   *                           example: false
+   *                 createdAt:
+   *                   type: string
+   *                   format: date-time
+   *                 updatedAt:
+   *                   type: string
+   *                   format: date-time
+   *       500:
+   *         description: Server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *                   example: "Error message"
+   */
   router.post('/test-user', async (req, res) => {
     try {
       const latestUser = await User.findOne({ role: 'user' }).sort({ username: -1 });
@@ -256,11 +630,37 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 /**
- * GET /health
- * Health check route to verify that the API server is running.
+ * @swagger
+ * /api/auth/health:
+ *   get:
+ *     summary: Health check for authentication service
+ *     description: Verifies that the authentication API server is running and responsive
+ *     tags: [Authentication]
+ *     responses:
+ *       200:
+ *         description: API is healthy and running
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: "ok"
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                   example: "2025-05-30T22:30:45.123Z"
+ *                 service:
+ *                   type: string
+ *                   example: "authentication"
  */
 router.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
+  res.status(200).json({ 
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    service: 'authentication'
+  });
 });
 
 module.exports = router;
