@@ -14,6 +14,7 @@ const cookieParser = require('cookie-parser');
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
+const prospectConversionRoutes = require('./routes/prospectConversions');
 
 // Import the dedicated Swagger router
 const swaggerRouter = require('./routes/swagger');
@@ -93,6 +94,7 @@ app.use('/api/modules', require('./routes/modules'));
 app.use('/api/beta', require('./routes/beta'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/security', require('./routes/security'));
+app.use('/api/admin/prospect-conversions', prospectConversionRoutes);
 
 // ---------------------------------------------------
 // Development-Only Routes
