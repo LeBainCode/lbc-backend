@@ -51,8 +51,9 @@ const swaggerOptions = {
     './src/routes/beta.js',
     './src/routes/dashboard.js',
     './src/routes/security.js',
-    'src/routes/prospectConversion.js',
-    'src/models/ProspectCoonversion.js'
+    'src/routes/prospectConversions.js',
+    'src/models/ProspectConversion.js',
+    'src/routes/debugLogs.js',
   ],
 };
 

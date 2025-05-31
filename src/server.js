@@ -15,6 +15,7 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 const prospectConversionRoutes = require('./routes/prospectConversions');
+const { initDebugger, debugMiddleware, debug } = require('./utils/debugLogger');
 
 // Import the dedicated Swagger router
 const swaggerRouter = require('./routes/swagger');
@@ -31,6 +32,15 @@ app.use((req, res, next) => {
   console.log('Path:', req.path);
   console.log('Query:', req.query);
   console.log('Headers:', req.headers);
+  next();
+});
+
+// Use the debug utility in your existing middleware
+app.use((req, res, next) => {
+  debug('Server', `Incoming request: ${req.method} ${req.path}`, {
+    query: req.query,
+    headers: req.headers
+  });
   next();
 });
 
@@ -76,6 +86,8 @@ app.use(session({
 app.use(passport.session());
 configureGitHubStrategy();
 
+app.use(debugMiddleware);
+
 // ---------------------------------------------------
 // Swagger Documentation
 // ---------------------------------------------------
@@ -95,6 +107,7 @@ app.use('/api/beta', require('./routes/beta'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/security', require('./routes/security'));
 app.use('/api/admin/prospect-conversions', prospectConversionRoutes);
+app.use('/api/admin/debug-logs', require('./routes/debugLogs'));
 
 // ---------------------------------------------------
 // Development-Only Routes
