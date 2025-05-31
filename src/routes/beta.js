@@ -5,6 +5,7 @@ const User = require('../models/User');
 const verifyToken = require('../middleware/verifyToken');
 const { checkRole } = require('../middleware/checkRoleAccess');
 const mongoose = require('mongoose');
+const emailNotifications = require('../middleware/emailNotificationMiddleware');
 
 /**
  * @swagger
@@ -122,6 +123,12 @@ router.post('/apply', verifyToken, async (req, res) => {
     };
     
     await user.save();
+
+     // Send email notification
+    if (user.email) {
+      emailNotifications.sendBetaApplicationSubmittedEmail(user._id, applicationId)
+        .catch(err => debug.error('Beta', 'Failed to send beta application email', err));
+    }
     
     res.status(200).json({
       success: true,
@@ -786,6 +793,12 @@ router.post('/approve/:applicationId', verifyToken, checkRole('admin'), async (r
     }
     
     await user.save();
+
+    // Send email notification
+    if (user.email) {
+      emailNotifications.sendBetaApplicationApprovedEmail(user._id, req.user._id)
+        .catch(err => debug.error('Beta', 'Failed to send beta approval email', err));
+    }
     
     res.status(200).json({
       success: true,
@@ -881,6 +894,12 @@ router.post('/reject/:applicationId', verifyToken, checkRole('admin'), async (re
     }
     
     await user.save();
+
+     // Send email notification
+    if (user.email) {
+      emailNotifications.sendBetaApplicationRejectedEmail(user._id, req.user._id, reason)
+        .catch(err => debug.error('Beta', 'Failed to send beta rejection email', err));
+    }
     
     res.status(200).json({
       success: true,

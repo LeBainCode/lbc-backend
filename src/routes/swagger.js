@@ -54,6 +54,8 @@ const swaggerOptions = {
     'src/routes/prospectConversions.js',
     'src/models/ProspectConversion.js',
     'src/routes/debugLogs.js',
+    'src/models/EmailEvents.js',
+    'src/routes/emailNotifications.js',
   ],
 };
 
