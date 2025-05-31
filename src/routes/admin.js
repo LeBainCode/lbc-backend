@@ -768,6 +768,22 @@ router.post('/admins', adminMiddleware, async (req, res) => {
                 createdAt: newAdmin.createdAt
             }
         });
+            // After creating user
+        const emailNotifications = require('../middleware/emailNotificationMiddleware');
+        if (newAdmin.email) {
+        // Generate a reset token for initial password setup
+        const crypto = require('crypto');
+        const resetToken = crypto.randomBytes(20).toString('hex');
+        
+        // Save reset token to user
+        newAdmin.resetPasswordToken = resetToken;
+        newAdmin.resetPasswordExpires = Date.now() + 86400000; // 1 day
+        await newAdmin.save();
+        
+        // Send email notification
+        emailNotifications.sendAdminCreatedAccountEmail(newAdmin._id, resetToken)
+            .catch(err => debug.error('Admin', 'Failed to send admin created account email', err));
+        }
     } catch (error) {
         console.error('Error creating admin:', error);
         res.status(500).json({ 

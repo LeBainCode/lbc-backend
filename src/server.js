@@ -108,6 +108,7 @@ app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/security', require('./routes/security'));
 app.use('/api/admin/prospect-conversions', prospectConversionRoutes);
 app.use('/api/admin/debug-logs', require('./routes/debugLogs'));
+app.use('/api/email', require('./routes/emailNotifications'));
 
 // ---------------------------------------------------
 // Development-Only Routes
