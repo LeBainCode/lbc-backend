@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const swaggerJsdoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
-const path = require('path'); // Add this line - you're missing the path module
+const path = require('path'); // Required for path handling
 
 // Set up Swagger options including global API info and security components.
 const swaggerOptions = {
@@ -61,6 +61,13 @@ const swaggerOptions = {
 
 // Generate the Swagger specification
 const specs = swaggerJsdoc(swaggerOptions);
+
+// Add an endpoint to download the raw JSON specification
+router.get('/json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', 'attachment; filename="swagger.json"');
+  res.send(specs);
+});
 
 // Serve the Swagger UI documentation at /api-docs
 router.use(

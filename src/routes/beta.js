@@ -1006,13 +1006,78 @@ router.post('/revoke/:userId', verifyToken, checkRole('admin'), async (req, res)
  * @swagger
  * /api/beta/users:
  *   get:
- *     summary: Get all beta users (admin only)
+ *     summary: Get all beta users with detailed application information (admin only)
  *     tags: [Beta]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: includeRevoked
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Include users with revoked beta access
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [enabledAt, submittedAt, username, createdAt]
+ *           default: enabledAt
+ *         description: Sort users by field
+ *       - in: query
+ *         name: order
+ *         schema:
+ *           type: string
+ *           enum: [desc, asc]
+ *           default: desc
+ *         description: Sort order
  *     responses:
  *       200:
- *         description: List of beta users
+ *         description: List of beta users with detailed application information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 count:
+ *                   type: integer
+ *                 users:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       userId:
+ *                         type: string
+ *                       username:
+ *                         type: string
+ *                       email:
+ *                         type: string
+ *                       role:
+ *                         type: string
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                       betaAccess:
+ *                         type: object
+ *                       application:
+ *                         type: object
+ *                       daysSinceApplication:
+ *                         type: integer
+ *                       daysSinceBetaAccess:
+ *                         type: integer
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     activeBetaUsers:
+ *                       type: integer
+ *                     revokedBetaUsers:
+ *                       type: integer
+ *                     withApplications:
+ *                       type: integer
+ *                     withoutApplications:
+ *                       type: integer
  *       401:
  *         description: Unauthorized
  *       403:
@@ -1022,37 +1087,170 @@ router.post('/revoke/:userId', verifyToken, checkRole('admin'), async (req, res)
  */
 router.get('/users', verifyToken, checkRole('admin'), async (req, res) => {
   try {
-    const betaUsers = await User.find({ role: 'beta' })
-      .select('username email betaAccess createdAt');
+    const { 
+      includeRevoked = 'false',
+      sortBy = 'enabledAt', 
+      order = 'desc' 
+    } = req.query;
     
-    const formattedUsers = betaUsers.map(user => ({
-      userId: user._id,
-      username: user.username,
-      email: user.email,
-      role: user.role,
-      betaAccess: {
-        enabledAt: user.betaAccess.enabledAt,
-        enabledBy: user.betaAccess.enabledBy,
-        revokedAt: user.betaAccess.revokedAt || null
-      },
-      createdAt: user.createdAt,
-      // Include application status URL if they have an application
-      ...(user.betaAccess.application?.applicationId && {
-        applicationId: user.betaAccess.application.applicationId,
-        statusUrl: `/api/beta/application/status/${user.betaAccess.application.applicationId}`
-      })
-    }));
+    // Build query to find users with beta access
+    let query = {
+      $or: [
+        { role: 'beta' },
+        { 'betaAccess.isEnabled': true }
+      ]
+    };
+    
+    // If not including revoked users, filter them out
+    if (includeRevoked === 'false') {
+      query['betaAccess.revokedAt'] = { $exists: false };
+    }
+    
+    console.log('Query for beta users:', JSON.stringify(query, null, 2));
+    
+    // Find all beta users
+    const betaUsers = await User.find(query)
+      .select('username email role betaAccess createdAt')
+      .lean(); // Use lean for better performance
+    
+    console.log(`Found ${betaUsers.length} beta users`);
+    
+    // Format user data with comprehensive information
+    const formattedUsers = betaUsers.map(user => {
+      const hasApplication = user.betaAccess?.application?.submittedAt;
+      const isActive = (user.role === 'beta' || user.betaAccess?.isEnabled) && !user.betaAccess?.revokedAt;
+      
+      return {
+        userId: user._id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        createdAt: user.createdAt,
+        
+        // Beta access information
+        betaAccess: {
+          isEnabled: user.betaAccess?.isEnabled || false,
+          isActive: isActive,
+          enabledAt: user.betaAccess?.enabledAt || null,
+          enabledBy: user.betaAccess?.enabledBy || null,
+          revokedAt: user.betaAccess?.revokedAt || null,
+          revokedBy: user.betaAccess?.revokedBy || null
+        },
+        
+        // Full application details if they exist
+        application: hasApplication ? {
+          applicationId: user.betaAccess.application.applicationId,
+          status: user.betaAccess.application.status || 'pending',
+          submittedAt: user.betaAccess.application.submittedAt,
+          reviewedAt: user.betaAccess.application.reviewedAt || null,
+          reviewedBy: user.betaAccess.application.reviewedBy || null,
+          rejectionReason: user.betaAccess.application.rejectionReason || null,
+          adminComment: user.betaAccess.application.adminComment || null,
+          details: {
+            email: user.betaAccess.application.email,
+            occupation: user.betaAccess.application.occupation,
+            discordId: user.betaAccess.application.discordId || '',
+            reason: user.betaAccess.application.reason || ''
+          },
+          statusUrl: `/api/beta/application/status/${user.betaAccess.application.applicationId}`
+        } : null,
+        
+        // Useful calculated fields
+        daysSinceApplication: hasApplication 
+          ? Math.floor((new Date() - new Date(user.betaAccess.application.submittedAt)) / (1000 * 60 * 60 * 24))
+          : null,
+          
+        daysSinceBetaAccess: user.betaAccess?.enabledAt 
+          ? Math.floor((new Date() - new Date(user.betaAccess.enabledAt)) / (1000 * 60 * 60 * 24))
+          : null,
+          
+        daysSinceRevoked: user.betaAccess?.revokedAt 
+          ? Math.floor((new Date() - new Date(user.betaAccess.revokedAt)) / (1000 * 60 * 60 * 24))
+          : null,
+          
+        // Quick status indicator
+        status: isActive ? 'active' : 'revoked',
+        
+        // Application journey summary
+        applicationJourney: hasApplication ? {
+          hasApplication: true,
+          applicationStatus: user.betaAccess.application.status || 'pending',
+          timeFromApplicationToApproval: user.betaAccess.application.reviewedAt && user.betaAccess.application.submittedAt
+            ? Math.floor((new Date(user.betaAccess.application.reviewedAt) - new Date(user.betaAccess.application.submittedAt)) / (1000 * 60 * 60 * 24))
+            : null
+        } : {
+          hasApplication: false,
+          note: 'Beta access granted without application (likely admin granted)'
+        }
+      };
+    });
+    
+    // Sort users based on specified criteria
+    formattedUsers.sort((a, b) => {
+      let aValue, bValue;
+      
+      switch (sortBy) {
+        case 'enabledAt':
+          aValue = a.betaAccess.enabledAt || a.createdAt;
+          bValue = b.betaAccess.enabledAt || b.createdAt;
+          break;
+        case 'submittedAt':
+          aValue = a.application?.submittedAt || new Date(0);
+          bValue = b.application?.submittedAt || new Date(0);
+          break;
+        case 'username':
+          aValue = a.username.toLowerCase();
+          bValue = b.username.toLowerCase();
+          break;
+        case 'createdAt':
+          aValue = a.createdAt;
+          bValue = b.createdAt;
+          break;
+        default:
+          aValue = a.betaAccess.enabledAt || a.createdAt;
+          bValue = b.betaAccess.enabledAt || b.createdAt;
+      }
+      
+      if (sortBy === 'username') {
+        return order === 'desc' ? bValue.localeCompare(aValue) : aValue.localeCompare(bValue);
+      }
+      
+      return order === 'desc' 
+        ? new Date(bValue) - new Date(aValue)
+        : new Date(aValue) - new Date(bValue);
+    });
+    
+    // Calculate summary statistics
+    const summary = {
+      totalBetaUsers: formattedUsers.length,
+      activeBetaUsers: formattedUsers.filter(u => u.status === 'active').length,
+      revokedBetaUsers: formattedUsers.filter(u => u.status === 'revoked').length,
+      withApplications: formattedUsers.filter(u => u.application !== null).length,
+      withoutApplications: formattedUsers.filter(u => u.application === null).length,
+      averageDaysSinceBetaAccess: formattedUsers
+        .filter(u => u.daysSinceBetaAccess !== null)
+        .reduce((sum, u) => sum + u.daysSinceBetaAccess, 0) / 
+        formattedUsers.filter(u => u.daysSinceBetaAccess !== null).length || 0
+    };
     
     res.status(200).json({
       success: true,
-      count: betaUsers.length,
-      users: formattedUsers
+      count: formattedUsers.length,
+      users: formattedUsers,
+      summary,
+      filter: {
+        includeRevoked: includeRevoked === 'true',
+        sortBy,
+        order
+      }
     });
+    
   } catch (error) {
     console.error('Error fetching beta users:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching beta users'
+      message: 'Error fetching beta users',
+      error: error.message
     });
   }
 });
